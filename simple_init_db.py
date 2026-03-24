@@ -400,6 +400,68 @@ def link_campaign_lead(cursor, campaign_id, lead_id, source, converted=False, co
     return cursor.lastrowid
 
 
+def build_customer_interaction_timeline(customer_id, owner_id, customer_payload, index):
+    status = customer_payload['status']
+    company = customer_payload['company'] or f"{customer_payload['first_name']}{customer_payload['last_name']}"
+    level = customer_payload['customer_level']
+    base_hour = 9 + (index % 5)
+    duration_seed = 15 + (index % 4) * 10
+
+    if status == 'customer':
+        phases = [
+            ('meeting', '季度复盘与扩容规划', '客户确认当前协作流程稳定，希望下一阶段扩展更多团队使用范围。', 'positive', '整理扩容报价和实施排期', -12, 30),
+            ('call', '采购流程确认', '已确认审批链路和预算窗口，采购负责人希望尽快收到正式方案。', 'positive', '本周内发送最终商务条款', -5, 25),
+            ('note', '交付后复盘记录', '上线效果稳定，业务方反馈看板与提醒功能使用频率较高。', 'positive', '两周后跟进续费与增购可能', -2, 15),
+        ]
+    elif status == 'prospect':
+        phases = [
+            ('email', '需求材料发送', '已发送行业案例与标准实施清单，客户正在内部评估。', 'neutral', '等待客户整理问题清单', -10, 10),
+            ('call', '预算与时间窗口确认', '客户对方案方向认可，但需要结合季度预算再做决策。', 'neutral', '下周电话继续确认预算批复情况', -4, 20),
+            ('meeting', '方案演示沟通', '演示过程中重点讨论了审批、看板和移动端使用体验。', 'positive', '根据会议纪要调整演示重点', -1, 45),
+        ]
+    elif status == 'inactive':
+        phases = [
+            ('note', '历史沉睡客户标记', '近一个周期未主动回复，需要重新设计触达方式。', 'negative', '结合活动权益重启联系', -18, 10),
+            ('email', '唤醒邮件发送', '发送回访邮件和限时权益，观察是否恢复互动。', 'neutral', '3 天后查看是否打开邮件', -9, 8),
+            ('call', '重新建立接触窗口', '联系到相关负责人，对方愿意在下个预算周期重新评估。', 'neutral', '预算窗口开启后再次约访', -3, 18),
+        ]
+    else:
+        phases = [
+            ('email', '首次触达介绍', '基于公开渠道信息发送产品简介与演示邀请。', 'neutral', '48 小时后电话确认是否收到', -8, 8),
+            ('call', '首轮需求摸排', '客户已说明当前流程痛点，正在评估是否安排深度演示。', 'positive', '准备行业化演示脚本', -3, 22),
+            ('note', '线索研判记录', '记录线索质量、决策链角色和潜在机会大小。', 'positive', '继续推进样板演示预约', -1, 12),
+        ]
+
+    if level == 'VIP':
+        phases.append(
+            ('meeting', '高价值客户专项推进', '针对高价值客户补充多团队协作、报表与权限策略讨论。', 'positive', '安排管理层联合评审', 1, 60)
+        )
+    elif level == 'Premium':
+        phases.append(
+            ('call', '高级功能价值确认', '重点沟通集成、自动化和数据分析类能力的投入产出。', 'positive', '补充 ROI 估算与案例', 0, 28)
+        )
+
+    interaction_records = []
+    for phase_index, (interaction_type, subject, description, outcome, next_action, day_offset, duration) in enumerate(phases, start=1):
+        interaction_records.append(
+            {
+                'customer_id': customer_id,
+                'user_id': owner_id,
+                'interaction_type': interaction_type,
+                'subject': f'{company} · {subject}',
+                'description': description,
+                'date': dt(day_offset - (index % 3), base_hour + (phase_index % 3), 10 + phase_index),
+                'duration_minutes': duration if interaction_type != 'email' else min(duration, duration_seed),
+                'outcome': outcome,
+                'next_action': next_action,
+                'created_at': dt(day_offset - (index % 3), base_hour + (phase_index % 3), 10 + phase_index),
+                'updated_at': dt(day_offset - (index % 3), base_hour + (phase_index % 3), 10 + phase_index),
+            }
+        )
+
+    return interaction_records
+
+
 def init_db():
     db_path = os.path.join(os.path.dirname(__file__), 'backend', 'crm.db')
     conn = sqlite3.connect(db_path)
@@ -648,6 +710,32 @@ def init_db():
         ('严', '诺', '麦禾餐饮', '重庆', '中国', 'prospect', 'Standard'),
         ('华', '清', '曜云教育', '郑州', '中国', 'lead', 'Premium'),
     ]
+    generated_companies = [
+        '星图云仓', '远峰出海', '识川工业', '和曜医疗', '澄石财税', '海岚家装', '新域汽配', '沐辰供应链',
+        '灵泊教育', '山海文旅', '浩维制造', '拓元科技', '数引咨询', '衡川物流', '知行零售', '观澜生物',
+        '卓见能源', '青禾软件', '百川餐饮', '凌云传媒', '远志资本', '启航物业', '万象服饰', '森屿农业',
+    ]
+    generated_cities = [
+        '上海', '北京', '深圳', '广州', '杭州', '苏州', '成都', '武汉',
+        '南京', '天津', '重庆', '西安', '青岛', '厦门', '长沙', '合肥',
+    ]
+    generated_statuses = ['prospect', 'lead', 'customer', 'inactive']
+    generated_levels = ['Standard', 'Premium', 'VIP']
+    for index, company in enumerate(generated_companies, start=1):
+        city = generated_cities[index % len(generated_cities)]
+        status = generated_statuses[index % len(generated_statuses)]
+        level = generated_levels[index % len(generated_levels)]
+        extra_customer_profiles.append(
+            (
+                f'演{index:02d}',
+                f'示{index:02d}',
+                company,
+                city,
+                '中国',
+                status,
+                level,
+            )
+        )
     for index, profile in enumerate(extra_customer_profiles, start=1):
         first_name, last_name, company, city, country, status, level = profile
         owner_key = 'sales_wang' if index % 2 else 'sales_zhou'
@@ -832,7 +920,7 @@ def init_db():
         },
     }
     stage_cycle = ['lead', 'qualification', 'proposal', 'negotiation', 'won', 'lost']
-    for index, customer_key in enumerate(bulk_customer_keys[:14], start=1):
+    for index, customer_key in enumerate(bulk_customer_keys[:30], start=1):
         owner_id = customers[customer_key]['assigned_sales_rep_id']
         stage = stage_cycle[index % len(stage_cycle)]
         opportunities[f'bulk_opportunity_{index:02d}'] = {
@@ -908,7 +996,7 @@ def init_db():
         },
     }
     won_bulk_keys = [key for key, value in opportunities.items() if key.startswith('bulk_opportunity_') and value['stage'] == 'won']
-    for index, opp_key in enumerate(won_bulk_keys[:8], start=1):
+    for index, opp_key in enumerate(won_bulk_keys[:16], start=1):
         opp = opportunities[opp_key]
         orders[f'BULK-ORD-{index:03d}'] = {
             'order_number': f'BULK-ORD-{index:03d}',
@@ -970,7 +1058,7 @@ def init_db():
             'updated_at': dt(-2),
         },
     }
-    for index in range(1, 5):
+    for index in range(1, 9):
         campaigns[f'bulk_campaign_{index:02d}'] = {
             'name': f'季度增长活动 {index:02d}',
             'description': f'批量模拟营销活动 {index}，用于验证渠道、预算和线索联动。',
@@ -1054,22 +1142,15 @@ def init_db():
             'updated_at': dt(-20, 10, 45),
         },
     ]
-    for index, customer_key in enumerate(bulk_customer_keys[:16], start=1):
-        owner_id = customers[customer_key]['assigned_sales_rep_id']
-        interactions.append(
-            {
-                'customer_id': customer_ids[customer_key],
-                'user_id': owner_id,
-                'interaction_type': ['email', 'call', 'meeting', 'note'][index % 4],
-                'subject': f"{customers[customer_key]['company']} 跟进记录 {index:02d}",
-                'description': f'批量模拟互动 {index}，用于展示最近活动、互动分布和时间线。',
-                'date': dt(-(index % 18) - 1, 9 + (index % 6), 10),
-                'duration_minutes': 15 + (index % 4) * 15,
-                'outcome': ['positive', 'neutral', 'negative'][index % 3],
-                'next_action': '继续推进需求确认与报价节奏',
-                'created_at': dt(-(index % 18) - 1, 9 + (index % 6), 10),
-                'updated_at': dt(-(index % 18) - 1, 9 + (index % 6), 10),
-            }
+    for index, (customer_key, customer_payload) in enumerate(customers.items(), start=1):
+        owner_id = customer_payload['assigned_sales_rep_id']
+        interactions.extend(
+            build_customer_interaction_timeline(
+                customer_ids[customer_key],
+                owner_id,
+                customer_payload,
+                index,
+            )
         )
     for interaction in interactions:
         get_or_create_interaction(cursor, interaction)
@@ -1079,7 +1160,7 @@ def init_db():
     link_campaign_lead(cursor, campaign_ids['private_deploy'], lead_ids['liuna_referral'], 'referral', False, None)
     link_campaign_lead(cursor, campaign_ids['reactivation'], lead_ids['johndoe_referral'], 'referral', True, dt(-55))
     link_campaign_lead(cursor, campaign_ids['reactivation'], lead_ids['sunpeng_phone'], 'phone', True, dt(-10))
-    for index, lead_key in enumerate([key for key in lead_ids if key.startswith('bulk_lead_')][:12], start=1):
+    for index, lead_key in enumerate([key for key in lead_ids if key.startswith('bulk_lead_')][:24], start=1):
         campaign_key = list(campaign_ids.keys())[index % len(campaign_ids)]
         converted = leads[lead_key]['status'] == 'converted'
         link_campaign_lead(cursor, campaign_ids[campaign_key], lead_ids[lead_key], leads[lead_key]['source'], converted, dt(-index) if converted else None)

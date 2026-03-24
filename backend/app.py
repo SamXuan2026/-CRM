@@ -52,6 +52,16 @@ def create_app():
             print("Tables already exist")
     
     # Health check endpoint
+    @app.route('/')
+    def index():
+        return {
+            'name': '八戒CRM Backend',
+            'status': 'running',
+            'health': '/health',
+            'frontend': 'http://172.16.1.32:3000',
+            'api_base': '/api'
+        }
+
     @app.route('/health')
     def health():
         return {'status': 'healthy', 'message': '八戒CRM is running'}
@@ -60,4 +70,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5006)
+    app.run(debug=False, host='0.0.0.0', port=5006, use_reloader=False)

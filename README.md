@@ -78,6 +78,29 @@ crm_system/
 
 ## Getting Started
 
+### Quick Start
+
+Start both services from the project root:
+
+```bash
+cd /Users/samxuan/sam/code/crm_system
+./start.sh
+```
+
+Check whether they are running:
+
+```bash
+./status.sh
+```
+
+Stop both services:
+
+```bash
+./stop.sh
+```
+
+Logs are written to `crm_system/logs/backend.log` and `crm_system/logs/frontend.log`.
+
 ### Prerequisites
 
 Make sure you have the following installed:
@@ -126,7 +149,7 @@ python ../simple_init_db.py
 python app.py
 ```
 
-The backend will be available at `http://localhost:5006`.
+The backend will be available at `http://172.16.1.32:5006`.
 
 ### Frontend Setup
 
@@ -145,7 +168,7 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:3000`.
+The frontend will be available at `http://172.16.1.32:3000`.
 
 ## API Endpoints
 

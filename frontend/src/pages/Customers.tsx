@@ -1,8 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import {
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
   Box,
   Button,
+  Card,
+  CardBody,
   Input,
   Table,
   Thead,
@@ -28,12 +34,18 @@ import {
   FormControl,
   FormLabel,
   Textarea,
+  Wrap,
+  WrapItem,
   Tabs,
   TabList,
   TabPanels,
   Tab,
   TabPanel,
+  SimpleGrid,
+  Progress,
+  Divider,
 } from '@chakra-ui/react';
+import { FiActivity, FiArrowRight, FiCheckCircle, FiClock, FiMessageCircle, FiPhoneCall } from 'react-icons/fi';
 import { apiRequestRaw } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
@@ -49,6 +61,7 @@ interface Customer {
   created_at: string;
   assigned_sales_rep_id?: number;
   notes?: string;
+  interaction_summary?: InteractionSummary;
 }
 
 interface Interaction {
@@ -59,6 +72,46 @@ interface Interaction {
   date: string;
   outcome?: string;
 }
+
+interface InteractionFormData {
+  interaction_type: string;
+  subject: string;
+  description: string;
+  outcome: string;
+  next_action?: string;
+  duration_minutes?: number | '';
+  date?: string;
+}
+
+interface InteractionSummary {
+  total_interactions: number;
+  last_interaction_at?: string | null;
+  last_interaction_type?: string | null;
+  last_interaction_subject?: string | null;
+  last_outcome?: string | null;
+  next_action?: string | null;
+}
+
+const statusLabelMap: Record<string, string> = {
+  lead: '线索',
+  prospect: '潜在客户',
+  customer: '已成交客户',
+  inactive: '沉默客户',
+};
+
+const interactionTypeLabelMap: Record<string, string> = {
+  email: '邮件',
+  call: '电话',
+  meeting: '会议',
+  note: '备注',
+  other: '其他',
+};
+
+const outcomeLabelMap: Record<string, string> = {
+  positive: '推进顺利',
+  neutral: '待观察',
+  negative: '存在阻力',
+};
 
 const Customers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -73,7 +126,7 @@ const Customers: React.FC = () => {
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [editingCustomer, setEditingCustomer] = useState<Partial<Customer> | null>(null);
   const toast = useToast();
-  const { user } = useAuth();
+  const { user, hasPermission, hasRole } = useAuth();
   const {
     isOpen: isDetailOpen,
     onOpen: onDetailOpen,
@@ -159,6 +212,11 @@ const Customers: React.FC = () => {
     onDetailOpen();
   };
 
+  const handleQuickAddInteraction = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    onInteractionOpen();
+  };
+
   const handleCreateCustomer = async (data: Partial<Customer>) => {
     try {
       const response = await apiRequestRaw('POST', '/customers', data);
@@ -239,7 +297,7 @@ const Customers: React.FC = () => {
     }
   };
 
-  const handleAddInteraction = async (formData: any) => {
+  const handleAddInteraction = async (formData: InteractionFormData) => {
     if (!selectedCustomer) return;
 
     try {
@@ -258,6 +316,7 @@ const Customers: React.FC = () => {
         });
         onInteractionClose();
         await fetchInteractions(selectedCustomer.id);
+        return true;
       }
     } catch (error: any) {
       toast({
@@ -267,6 +326,8 @@ const Customers: React.FC = () => {
         isClosable: true,
       });
     }
+
+    return false;
   };
 
   const getStatusColor = (status: string) => {
@@ -288,6 +349,62 @@ const Customers: React.FC = () => {
     return colors[level] || 'gray';
   };
 
+  const customerSummary = customers.reduce(
+    (acc, customer) => {
+      acc.total += 1;
+      acc.byStatus[customer.status] = (acc.byStatus[customer.status] || 0) + 1;
+      acc.byLevel[customer.customer_level] = (acc.byLevel[customer.customer_level] || 0) + 1;
+      if (customer.company) {
+        acc.withCompany += 1;
+      }
+      return acc;
+    },
+    {
+      total: 0,
+      withCompany: 0,
+      byStatus: {} as Record<string, number>,
+      byLevel: {} as Record<string, number>,
+    }
+  );
+
+  const followUpSummary = customers.reduce(
+    (acc, customer) => {
+      const summary = customer.interaction_summary;
+      if (!summary?.total_interactions) {
+        acc.missing += 1;
+        return acc;
+      }
+
+      acc.covered += 1;
+
+      if (summary.last_interaction_at) {
+        const diffHours = (Date.now() - new Date(summary.last_interaction_at).getTime()) / (1000 * 60 * 60);
+        if (diffHours <= 72) {
+          acc.recent += 1;
+        }
+      }
+
+      if (summary.next_action) {
+        acc.withNextAction += 1;
+      }
+
+      return acc;
+    },
+    {
+      covered: 0,
+      missing: 0,
+      recent: 0,
+      withNextAction: 0,
+    }
+  );
+
+  const statusItems = Object.entries(customerSummary.byStatus).sort((a, b) => b[1] - a[1]);
+  const maxStatusValue = Math.max(...statusItems.map(([, value]) => value), 1);
+  const canCreateCustomer = hasPermission('customers:create');
+  const canUpdateCustomer = hasPermission('customers:update');
+  const canDeleteCustomer = hasRole('admin');
+  const canAddInteraction = canUpdateCustomer;
+
   return (
     <VStack spacing={6} align="stretch" p={6}>
       <Box>
@@ -298,11 +415,135 @@ const Customers: React.FC = () => {
           <Button
             colorScheme="blue"
             onClick={onCreateOpen}
-            isDisabled={!user}
+            isDisabled={!user || !canCreateCustomer}
           >
             + 新建客户
           </Button>
         </HStack>
+
+        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mb={5}>
+          <Card bg="rgba(255,255,255,0.94)" borderRadius="24px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)">
+            <CardBody>
+              <Text fontSize="sm" color="gray.500">当前视图客户数</Text>
+              <Text fontSize="3xl" fontWeight="800" color="gray.800" mt={2}>
+                {customerSummary.total}
+              </Text>
+              <Text mt={2} fontSize="sm" color="gray.600">
+                当前筛选条件下已加载的客户规模
+              </Text>
+            </CardBody>
+          </Card>
+          <Card bg="rgba(255,255,255,0.94)" borderRadius="24px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)">
+            <CardBody>
+              <Text fontSize="sm" color="gray.500">企业客户占比</Text>
+              <Text fontSize="3xl" fontWeight="800" color="gray.800" mt={2}>
+                {customerSummary.total ? Math.round((customerSummary.withCompany / customerSummary.total) * 100) : 0}%
+              </Text>
+              <Text mt={2} fontSize="sm" color="gray.600">
+                填写了公司信息的客户 {customerSummary.withCompany} 个
+              </Text>
+            </CardBody>
+          </Card>
+          <Card bg="rgba(255,255,255,0.94)" borderRadius="24px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)">
+            <CardBody>
+              <Text fontSize="sm" color="gray.500">客户等级焦点</Text>
+              <Text fontSize="xl" fontWeight="800" color="gray.800" mt={2}>
+                {Object.entries(customerSummary.byLevel).sort((a, b) => b[1] - a[1])[0]?.[0] || '暂无'}
+              </Text>
+              <Text mt={2} fontSize="sm" color="gray.600">
+                更快识别当前客户池的价值层级
+              </Text>
+            </CardBody>
+          </Card>
+        </SimpleGrid>
+
+        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mb={5}>
+          <Card bg="linear-gradient(135deg, rgba(32, 174, 164, 0.14), rgba(255,255,255,0.96))" borderRadius="24px" boxShadow="0 16px 36px rgba(34, 104, 110, 0.10)">
+            <CardBody>
+              <HStack justify="space-between" align="start">
+                <Box>
+                  <Text fontSize="sm" color="gray.500">已建立跟进的客户</Text>
+                  <Text fontSize="3xl" fontWeight="800" color="gray.800" mt={2}>
+                    {followUpSummary.covered}
+                  </Text>
+                  <Text mt={2} fontSize="sm" color="gray.600">
+                    当前页内已有互动记录的客户数量
+                  </Text>
+                </Box>
+                <Box p={3} borderRadius="20px" bg="whiteAlpha.700">
+                  <FiActivity />
+                </Box>
+              </HStack>
+            </CardBody>
+          </Card>
+          <Card bg="linear-gradient(135deg, rgba(240, 178, 74, 0.15), rgba(255,255,255,0.96))" borderRadius="24px" boxShadow="0 16px 36px rgba(135, 92, 19, 0.10)">
+            <CardBody>
+              <HStack justify="space-between" align="start">
+                <Box>
+                  <Text fontSize="sm" color="gray.500">72 小时内有跟进</Text>
+                  <Text fontSize="3xl" fontWeight="800" color="gray.800" mt={2}>
+                    {followUpSummary.recent}
+                  </Text>
+                  <Text mt={2} fontSize="sm" color="gray.600">
+                    用来识别近期仍在推进的客户节奏
+                  </Text>
+                </Box>
+                <Box p={3} borderRadius="20px" bg="whiteAlpha.700">
+                  <FiClock />
+                </Box>
+              </HStack>
+            </CardBody>
+          </Card>
+          <Card bg="linear-gradient(135deg, rgba(81, 166, 97, 0.16), rgba(255,255,255,0.96))" borderRadius="24px" boxShadow="0 16px 36px rgba(58, 110, 68, 0.10)">
+            <CardBody>
+              <HStack justify="space-between" align="start">
+                <Box>
+                  <Text fontSize="sm" color="gray.500">已写明下一步动作</Text>
+                  <Text fontSize="3xl" fontWeight="800" color="gray.800" mt={2}>
+                    {followUpSummary.withNextAction}
+                  </Text>
+                  <Text mt={2} fontSize="sm" color="gray.600">
+                    帮助团队把跟进从记录变成明确动作
+                  </Text>
+                </Box>
+                <Box p={3} borderRadius="20px" bg="whiteAlpha.700">
+                  <FiCheckCircle />
+                </Box>
+              </HStack>
+            </CardBody>
+          </Card>
+        </SimpleGrid>
+
+        <Card bg="rgba(255,255,255,0.94)" borderRadius="24px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)" mb={5}>
+          <CardBody>
+            <HStack justify="space-between" mb={3}>
+              <Box>
+                <Text fontSize="md" fontWeight="700" color="gray.800">客户状态概览</Text>
+                <Text fontSize="sm" color="gray.500">用更直观的方式看当前客户池结构</Text>
+              </Box>
+            </HStack>
+            {statusItems.length === 0 ? (
+              <Text color="gray.500">暂无客户状态数据</Text>
+            ) : (
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                {statusItems.map(([status, count]) => (
+                  <Box key={status}>
+                    <HStack justify="space-between" mb={1.5}>
+                      <Text fontSize="sm" color="gray.700">{statusLabelMap[status] || status}</Text>
+                      <Text fontSize="sm" fontWeight="700" color="gray.800">{count}</Text>
+                    </HStack>
+                    <Progress
+                      value={(count / maxStatusValue) * 100}
+                      colorScheme={getStatusColor(status)}
+                      borderRadius="full"
+                      bg="gray.100"
+                    />
+                  </Box>
+                ))}
+              </SimpleGrid>
+            )}
+          </CardBody>
+        </Card>
 
         {/* Filters and Search */}
         <HStack spacing={4} mb={6} wrap="wrap">
@@ -363,6 +604,7 @@ const Customers: React.FC = () => {
                   <Th>公司</Th>
                   <Th>状态</Th>
                   <Th>等级</Th>
+                  <Th>跟进动态</Th>
                   <Th>创建时间</Th>
                   <Th>操作</Th>
                 </Tr>
@@ -377,7 +619,7 @@ const Customers: React.FC = () => {
                     <Td>{customer.company || '-'}</Td>
                     <Td>
                       <Badge colorScheme={getStatusColor(customer.status)}>
-                        {customer.status}
+                        {statusLabelMap[customer.status] || customer.status}
                       </Badge>
                     </Td>
                     <Td>
@@ -385,18 +627,75 @@ const Customers: React.FC = () => {
                         {customer.customer_level}
                       </Badge>
                     </Td>
+                    <Td minW="280px">
+                      <VStack align="start" spacing={2}>
+                        <Wrap spacing={2}>
+                          <WrapItem>
+                            <Badge colorScheme={customer.interaction_summary?.total_interactions ? 'teal' : 'gray'}>
+                              {customer.interaction_summary?.total_interactions
+                                ? `${customer.interaction_summary.total_interactions} 次互动`
+                                : '待建立跟进'}
+                            </Badge>
+                          </WrapItem>
+                          {customer.interaction_summary?.last_interaction_type && (
+                            <WrapItem>
+                              <Badge colorScheme="blue">
+                                {interactionTypeLabelMap[customer.interaction_summary.last_interaction_type] || customer.interaction_summary.last_interaction_type}
+                              </Badge>
+                            </WrapItem>
+                          )}
+                          {customer.interaction_summary?.last_outcome && (
+                            <WrapItem>
+                              <Badge colorScheme={customer.interaction_summary.last_outcome === 'positive' ? 'green' : customer.interaction_summary.last_outcome === 'negative' ? 'red' : 'orange'}>
+                                {outcomeLabelMap[customer.interaction_summary.last_outcome] || customer.interaction_summary.last_outcome}
+                              </Badge>
+                            </WrapItem>
+                          )}
+                        </Wrap>
+                        {customer.interaction_summary?.last_interaction_subject ? (
+                          <>
+                            <Text fontSize="sm" fontWeight="700" color="gray.700" noOfLines={1}>
+                              {customer.interaction_summary.last_interaction_subject}
+                            </Text>
+                            <Text fontSize="xs" color="gray.500">
+                              最近跟进：{new Date(customer.interaction_summary.last_interaction_at || '').toLocaleString()}
+                            </Text>
+                            <Text fontSize="xs" color="gray.600" noOfLines={2}>
+                              下一步：{customer.interaction_summary.next_action || '建议尽快补充下一步动作'}
+                            </Text>
+                          </>
+                        ) : (
+                          <Text fontSize="sm" color="gray.500">
+                            还没有互动记录，建议先补一条首次触达或需求确认。
+                          </Text>
+                        )}
+                      </VStack>
+                    </Td>
                     <Td fontSize="sm">
                       {new Date(customer.created_at).toLocaleDateString()}
                     </Td>
                     <Td>
-                      <Button
-                        size="sm"
-                        colorScheme="blue"
-                        variant="ghost"
-                        onClick={() => handleViewDetails(customer)}
-                      >
-                        查看
-                      </Button>
+                      <VStack align="stretch" spacing={2}>
+                        <Button
+                          size="sm"
+                          colorScheme="teal"
+                          leftIcon={<FiMessageCircle />}
+                          boxShadow="0 8px 18px rgba(31, 150, 143, 0.20)"
+                          onClick={() => handleQuickAddInteraction(customer)}
+                          isDisabled={!canAddInteraction}
+                        >
+                          记录跟进
+                        </Button>
+                        <Button
+                          size="sm"
+                          colorScheme="blue"
+                          variant="ghost"
+                          rightIcon={<FiArrowRight />}
+                          onClick={() => handleViewDetails(customer)}
+                        >
+                          查看
+                        </Button>
+                      </VStack>
                     </Td>
                   </Tr>
                 ))}
@@ -442,6 +741,8 @@ const Customers: React.FC = () => {
           customer={selectedCustomer}
           editingCustomer={editingCustomer}
           interactions={interactions}
+          canUpdateCustomer={canUpdateCustomer}
+          canDeleteCustomer={canDeleteCustomer}
           onUpdate={handleUpdateCustomer}
           onDelete={() => handleDeleteCustomer(selectedCustomer.id)}
           onAddInteraction={onInteractionOpen}
@@ -455,6 +756,7 @@ const Customers: React.FC = () => {
           isOpen={isInteractionOpen}
           onClose={onInteractionClose}
           onSubmit={handleAddInteraction}
+          customer={selectedCustomer}
         />
       )}
     </VStack>
@@ -606,6 +908,8 @@ interface CustomerDetailsModalProps {
   customer: Customer;
   editingCustomer: Partial<Customer>;
   interactions: Interaction[];
+  canUpdateCustomer: boolean;
+  canDeleteCustomer: boolean;
   onUpdate: () => void;
   onDelete: () => void;
   onAddInteraction: () => void;
@@ -618,6 +922,8 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   customer,
   editingCustomer,
   interactions,
+  canUpdateCustomer,
+  canDeleteCustomer,
   onUpdate,
   onDelete,
   onAddInteraction,
@@ -776,7 +1082,7 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                       </Box>
                       <Box>
                         <Text fontWeight="bold">状态</Text>
-                        <Badge colorScheme="blue">{customer.status}</Badge>
+                        <Badge colorScheme="blue">{statusLabelMap[customer.status] || customer.status}</Badge>
                       </Box>
                       <Box>
                         <Text fontWeight="bold">客户等级</Text>
@@ -806,6 +1112,7 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                     colorScheme="blue"
                     size="sm"
                     onClick={onAddInteraction}
+                    isDisabled={!canUpdateCustomer}
                   >
                     + 新增互动
                   </Button>
@@ -819,13 +1126,21 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                         key={interaction.id}
                         p={4}
                         border="1px solid"
-                        borderColor="gray.200"
-                        borderRadius="md"
+                        borderColor="rgba(183, 132, 70, 0.14)"
+                        borderRadius="18px"
+                        bg="rgba(255,255,255,0.72)"
                       >
                         <HStack justify="space-between" mb={2}>
-                          <Text fontWeight="bold">
-                            {interaction.interaction_type}
-                          </Text>
+                          <HStack spacing={2}>
+                            <Badge colorScheme="blue">
+                              {interactionTypeLabelMap[interaction.interaction_type] || interaction.interaction_type}
+                            </Badge>
+                            {interaction.outcome && (
+                              <Badge colorScheme={interaction.outcome === 'positive' ? 'green' : interaction.outcome === 'negative' ? 'red' : 'orange'}>
+                                {outcomeLabelMap[interaction.outcome] || interaction.outcome}
+                              </Badge>
+                            )}
+                          </HStack>
                           <Text fontSize="sm" color="gray.500">
                             {new Date(interaction.date).toLocaleString()}
                           </Text>
@@ -835,11 +1150,6 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                           <Text fontSize="sm" color="gray.600" mt={2}>
                             {interaction.description}
                           </Text>
-                        )}
-                        {interaction.outcome && (
-                          <Badge mt={2} colorScheme="green" fontSize="xs">
-                            {interaction.outcome}
-                          </Badge>
                         )}
                       </Box>
                     ))
@@ -874,12 +1184,14 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                 variant="ghost"
                 mr={3}
                 onClick={onDelete}
+                isDisabled={!canDeleteCustomer}
               >
                 删除
               </Button>
               <Button
                 colorScheme="blue"
                 onClick={() => setIsEditing(true)}
+                isDisabled={!canUpdateCustomer}
               >
                 编辑
               </Button>
@@ -897,19 +1209,24 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 interface AddInteractionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: InteractionFormData) => Promise<boolean | void>;
+  customer: Customer;
 }
 
 const AddInteractionModal: React.FC<AddInteractionModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  customer,
 }) => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<InteractionFormData>({
     interaction_type: 'email',
     subject: '',
     description: '',
     outcome: 'positive',
+    next_action: '',
+    duration_minutes: '',
+    date: new Date().toISOString().slice(0, 16),
   });
   const [loading, setLoading] = useState(false);
 
@@ -920,57 +1237,120 @@ const AddInteractionModal: React.FC<AddInteractionModalProps> = ({
     }
 
     setLoading(true);
-    await onSubmit(formData);
+    const success = await onSubmit(formData);
     setLoading(false);
-    setFormData({
-      interaction_type: 'email',
-      subject: '',
-      description: '',
-      outcome: 'positive',
-    });
-    onClose();
+    if (success) {
+      setFormData({
+        interaction_type: 'email',
+        subject: '',
+        description: '',
+        outcome: 'positive',
+        next_action: '',
+        duration_minutes: '',
+        date: new Date().toISOString().slice(0, 16),
+      });
+      onClose();
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>新增互动记录</ModalHeader>
+        <ModalHeader>
+          新增互动记录
+          <Text mt={1} fontSize="sm" fontWeight="normal" color="gray.500">
+            当前客户：{customer.first_name} {customer.last_name}
+            {customer.company ? ` · ${customer.company}` : ''}
+          </Text>
+        </ModalHeader>
         <ModalCloseButton />
         <ModalBody>
-          <VStack spacing={4}>
-            <FormControl isRequired>
-              <FormLabel>互动类型</FormLabel>
-              <Select
-                value={formData.interaction_type}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    interaction_type: e.target.value,
-                  })
-                }
-              >
-                <option value="email">邮件</option>
-                <option value="call">电话</option>
-                <option value="meeting">会议</option>
-                <option value="note">备注</option>
-                <option value="other">其他</option>
-              </Select>
-            </FormControl>
+          <VStack spacing={4} align="stretch">
+            <Alert status="info" borderRadius="20px" bg="rgba(59, 130, 246, 0.08)">
+              <AlertIcon />
+              <Box>
+                <AlertTitle fontSize="sm">把这次跟进记录完整一点</AlertTitle>
+                <AlertDescription fontSize="sm">
+                  建议至少填写主题、结果和下一步动作，后续列表里就能直接看到推进节奏。
+                </AlertDescription>
+              </Box>
+            </Alert>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>互动类型</FormLabel>
+                <Select
+                  value={formData.interaction_type}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      interaction_type: e.target.value,
+                    })
+                  }
+                >
+                  <option value="email">邮件</option>
+                  <option value="call">电话</option>
+                  <option value="meeting">会议</option>
+                  <option value="note">备注</option>
+                  <option value="other">其他</option>
+                </Select>
+              </FormControl>
+              <FormControl>
+                <FormLabel>互动时间</FormLabel>
+                <Input
+                  type="datetime-local"
+                  value={formData.date || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, date: e.target.value })
+                  }
+                />
+              </FormControl>
+            </SimpleGrid>
             <FormControl isRequired>
               <FormLabel>主题</FormLabel>
               <Input
-                placeholder="请输入互动主题"
+                placeholder="例如：首次电话沟通预算范围"
                 value={formData.subject}
                 onChange={(e) =>
                   setFormData({ ...formData, subject: e.target.value })
                 }
               />
             </FormControl>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <FormControl>
+                <FormLabel>结果判断</FormLabel>
+                <Select
+                  value={formData.outcome}
+                  onChange={(e) =>
+                    setFormData({ ...formData, outcome: e.target.value })
+                  }
+                >
+                  <option value="positive">积极</option>
+                  <option value="neutral">中性</option>
+                  <option value="negative">消极</option>
+                </Select>
+              </FormControl>
+              <FormControl>
+                <FormLabel>时长（分钟）</FormLabel>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="可选"
+                  value={formData.duration_minutes}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      duration_minutes: e.target.value ? Number(e.target.value) : '',
+                    })
+                  }
+                />
+              </FormControl>
+            </SimpleGrid>
             <FormControl>
               <FormLabel>说明</FormLabel>
               <Textarea
-                placeholder="记录本次互动的详细内容"
+                minH="120px"
+                placeholder="记录这次互动里客户表达的需求、顾虑、预算或决策信息"
                 value={formData.description}
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
@@ -978,18 +1358,23 @@ const AddInteractionModal: React.FC<AddInteractionModalProps> = ({
               />
             </FormControl>
             <FormControl>
-              <FormLabel>结果</FormLabel>
-              <Select
-                value={formData.outcome}
+              <FormLabel>下一步动作</FormLabel>
+              <Textarea
+                minH="88px"
+                placeholder="例如：周五前发送方案修订版，并在下周二安排演示"
+                value={formData.next_action || ''}
                 onChange={(e) =>
-                  setFormData({ ...formData, outcome: e.target.value })
+                  setFormData({ ...formData, next_action: e.target.value })
                 }
-              >
-                <option value="positive">积极</option>
-                <option value="neutral">中性</option>
-                <option value="negative">消极</option>
-              </Select>
+              />
             </FormControl>
+            <Divider />
+            <HStack spacing={3} align="start" color="gray.500" fontSize="sm">
+              <FiPhoneCall />
+              <Text>
+                跟进记录会同步进入客户详情页的互动时间线，方便后续继续补充和回看。
+              </Text>
+            </HStack>
           </VStack>
         </ModalBody>
         <ModalFooter>

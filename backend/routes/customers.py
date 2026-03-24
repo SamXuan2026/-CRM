@@ -8,6 +8,10 @@ from datetime import datetime
 
 customers_bp = Blueprint('customers', __name__)
 
+
+def _has_customer_global_scope(user):
+    return user.role in ['admin', 'manager', 'marketing', 'customer_service']
+
 @customers_bp.route('/', methods=['GET'])
 @jwt_required()
 @require_permission('customers:read')
@@ -39,7 +43,7 @@ def get_customers():
     
     if assigned_to:
         query = query.filter(Customer.assigned_sales_rep_id == assigned_to)
-    elif current_user.role not in ['admin', 'manager']:
+    elif not _has_customer_global_scope(current_user):
         # Non-admin/manager users can only see their own customers
         query = query.filter(Customer.assigned_sales_rep_id == current_user_id)
     
@@ -69,12 +73,55 @@ def get_customers():
         error_out=False
     )
     
-    data = {
-        'customers': [customer.to_dict() for customer in customers.items]
-    }
+    customer_items = customers.items
+    serialized_customers = [customer.to_dict() for customer in customer_items]
+    customer_id_list = [customer.id for customer in customer_items]
+
+    interaction_summary_map = {}
+    if customer_id_list:
+        interaction_rows = (
+            CustomerInteraction.query
+            .filter(CustomerInteraction.customer_id.in_(customer_id_list))
+            .order_by(CustomerInteraction.customer_id.asc(), CustomerInteraction.date.desc())
+            .all()
+        )
+
+        for interaction in interaction_rows:
+            summary = interaction_summary_map.setdefault(
+                interaction.customer_id,
+                {
+                    'total_interactions': 0,
+                    'last_interaction_at': None,
+                    'last_interaction_type': None,
+                    'last_interaction_subject': None,
+                    'last_outcome': None,
+                    'next_action': None,
+                },
+            )
+            summary['total_interactions'] += 1
+
+            if summary['last_interaction_at'] is None:
+                summary['last_interaction_at'] = interaction.date.isoformat()
+                summary['last_interaction_type'] = interaction.interaction_type
+                summary['last_interaction_subject'] = interaction.subject
+                summary['last_outcome'] = interaction.outcome
+                summary['next_action'] = interaction.next_action
+
+    for customer in serialized_customers:
+        customer['interaction_summary'] = interaction_summary_map.get(
+            customer['id'],
+            {
+                'total_interactions': 0,
+                'last_interaction_at': None,
+                'last_interaction_type': None,
+                'last_interaction_subject': None,
+                'last_outcome': None,
+                'next_action': None,
+            },
+        )
     
     return AppResponse.paginated(
-        data=data['customers'],
+        data=serialized_customers,
         page=page,
         per_page=per_page,
         total=customers.total,
@@ -156,7 +203,7 @@ def get_customer(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only see customers assigned to them
-    if current_user.role not in ['admin', 'manager'] and customer.assigned_sales_rep_id != current_user_id:
+    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
         return AppResponse.forbidden('You do not have permission to view this customer')
     
     return AppResponse.success(data=customer.to_dict())
@@ -177,7 +224,7 @@ def update_customer(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only update customers assigned to them
-    if current_user.role not in ['admin', 'manager'] and customer.assigned_sales_rep_id != current_user_id:
+    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
         return AppResponse.forbidden('You do not have permission to update this customer')
     
     data = request.get_json()
@@ -241,7 +288,7 @@ def get_customer_interactions(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only see interactions for their customers
-    if current_user.role not in ['admin', 'manager'] and customer.assigned_sales_rep_id != current_user_id:
+    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
         return AppResponse.forbidden('You do not have permission to view this customer')
     
     page, per_page = PaginationHelper.get_pagination_params()
@@ -289,7 +336,7 @@ def add_customer_interaction(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only add interactions for their customers
-    if current_user.role not in ['admin', 'manager'] and customer.assigned_sales_rep_id != current_user_id:
+    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
         return AppResponse.forbidden('You do not have permission to add interactions for this customer')
     
     data = request.get_json()
