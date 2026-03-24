@@ -11,3 +11,8 @@ instance/
 *.pyc
 .DS_Store
 *.log
+!backend/crm.db
+!backend/instance/
+!backend/instance/crm.db
+!instance/
+!instance/crm.db
