@@ -126,7 +126,7 @@ const Register = () => {
 
       toast({
         title: '注册成功',
-        description: '账户创建成功，欢迎使用八戒CRM！',
+        description: '账户创建成功，欢迎使用蓝鲸CRM！',
         status: 'success',
         duration: 3,
         isClosable: true,
@@ -150,7 +150,7 @@ const Register = () => {
   return (
     <Box
       minHeight="100vh"
-      bgGradient="linear(to-br, #f8f1e4, #eadcc7, #d8c1a1)"
+      bgGradient="linear(to-br, #f4f9ff, #dcebff, #bedcff)"
       display="flex"
       alignItems="center"
       justifyContent="center"
@@ -165,7 +165,7 @@ const Register = () => {
               创建账户
             </Heading>
             <Text color="gray.600" fontSize="md">
-              加入八戒CRM，开启高效销售之旅
+              加入蓝鲸CRM，开启高效销售之旅
             </Text>
           </Box>
 
@@ -174,7 +174,7 @@ const Register = () => {
             bg="rgba(255,255,255,0.92)"
             p={8}
             rounded="3xl"
-            boxShadow="0 18px 55px rgba(64, 38, 17, 0.12)"
+            boxShadow="0 18px 55px rgba(18, 61, 117, 0.12)"
             as="form"
             onSubmit={handleSubmit}
             border="1px solid rgba(255,255,255,0.45)"

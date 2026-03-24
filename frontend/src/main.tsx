@@ -18,16 +18,16 @@ const theme = extendTheme({
   },
   colors: {
     brand: {
-      50: '#f7f3ec',
-      100: '#eadfcb',
-      200: '#dcc39f',
-      300: '#caa371',
-      400: '#b78446',
-      500: '#9f6730',
-      600: '#7f4f25',
-      700: '#5f3a1b',
-      800: '#402611',
-      900: '#241307',
+      50: '#eef6ff',
+      100: '#d8e9ff',
+      200: '#b8d6ff',
+      300: '#87bbff',
+      400: '#569dff',
+      500: '#2f80ed',
+      600: '#1f66cf',
+      700: '#184ea3',
+      800: '#133777',
+      900: '#0b2149',
     },
     accent: {
       50: '#edf7f2',
@@ -45,7 +45,7 @@ const theme = extendTheme({
   styles: {
     global: {
       body: {
-        bg: '#f5efe6',
+        bg: '#edf4ff',
         color: 'gray.800',
       },
     },
@@ -61,7 +61,7 @@ const theme = extendTheme({
       baseStyle: {
         container: {
           borderRadius: '24px',
-          boxShadow: '0 16px 40px rgba(58, 38, 17, 0.08)',
+          boxShadow: '0 16px 40px rgba(20, 62, 120, 0.08)',
         },
       },
     },

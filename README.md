@@ -1,4 +1,4 @@
-# 八戒CRM
+# 蓝鲸CRM
 
 A comprehensive Customer Relationship Management system built with Flask (backend) and React (frontend).
 

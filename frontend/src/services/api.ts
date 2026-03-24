@@ -72,6 +72,52 @@ let failedQueue: Array<{
   onError: (error: any) => void;
 }> = [];
 
+const clearStoredAuth = () => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('user');
+};
+
+const redirectToLogin = () => {
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+};
+
+const isRefreshRequest = (config: AxiosRequestConfig | undefined) => {
+  const url = config?.url || '';
+  return typeof url === 'string' && url.includes('/refresh');
+};
+
+const shouldForceLogout = (error: any) => {
+  const status = error?.response?.status;
+  return status === 401 || status === 403 || status === 422;
+};
+
+const isJwtValidationError = (error: any) => {
+  const status = error?.response?.status;
+  const rawMessage =
+    error?.response?.data?.msg ||
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    '';
+  const message = String(rawMessage).toLowerCase();
+
+  if (status !== 422) {
+    return false;
+  }
+
+  return (
+    message.includes('subject must be a string') ||
+    message.includes('not enough segments') ||
+    message.includes('invalid token') ||
+    message.includes('jwt') ||
+    message.includes('signature') ||
+    message.includes('token')
+  );
+};
+
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -90,7 +136,20 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config || {};
+
+    if (isJwtValidationError(error)) {
+      clearStoredAuth();
+      redirectToLogin();
+      return Promise.reject(new Error('登录状态已失效，请重新登录'));
+    }
+
+    // refresh 请求自己失败时不能再次进入刷新队列，否则初始化会一直 pending。
+    if (error.response?.status === 401 && isRefreshRequest(originalRequest)) {
+      clearStoredAuth();
+      redirectToLogin();
+      return Promise.reject(new Error('登录状态已失效，请重新登录'));
+    }
 
     // 处理 401 未授权
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -98,6 +157,7 @@ api.interceptors.response.use(
         return new Promise((resolve, reject) => {
           failedQueue.push({
             onSuccess: (token: string) => {
+              originalRequest.headers = originalRequest.headers || {};
               originalRequest.headers.Authorization = `Bearer ${token}`;
               resolve(api(originalRequest));
             },
@@ -120,23 +180,25 @@ api.interceptors.response.use(
             const { access_token } = result;
             localStorage.setItem('access_token', access_token);
             api.defaults.headers.common.Authorization = `Bearer ${access_token}`;
+            originalRequest.headers = originalRequest.headers || {};
             originalRequest.headers.Authorization = `Bearer ${access_token}`;
             processQueue(null, access_token);
             return api(originalRequest);
           })
           .catch((err) => {
             processQueue(err, null);
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
+
+            // 只有在确认 token 已失效时才主动登出，避免临时网络抖动把用户直接踢回登录页。
+            if (shouldForceLogout(err)) {
+              clearStoredAuth();
+              redirectToLogin();
+            }
+
             return Promise.reject(err);
           });
       } else {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+        clearStoredAuth();
+        redirectToLogin();
         return Promise.reject(error);
       }
     }

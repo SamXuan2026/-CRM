@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Initialize a realistic demo dataset for 八戒CRM.
+Initialize a realistic demo dataset for 蓝鲸CRM.
 """
 import os
 import shutil
@@ -753,7 +753,7 @@ def init_db():
             'status': status,
             'customer_level': level,
             'assigned_sales_rep_id': user_ids[owner_key],
-            'notes': f'{company} 为八戒CRM 批量模拟客户，用于演示不同区域与行业的销售场景。',
+            'notes': f'{company} 为蓝鲸CRM 批量模拟客户，用于演示不同区域与行业的销售场景。',
             'created_at': dt(-60 + index),
             'updated_at': dt(-1),
         }
@@ -924,7 +924,7 @@ def init_db():
         owner_id = customers[customer_key]['assigned_sales_rep_id']
         stage = stage_cycle[index % len(stage_cycle)]
         opportunities[f'bulk_opportunity_{index:02d}'] = {
-            'name': f"{customers[customer_key]['company']} - 八戒CRM 方案 {index:02d}",
+            'name': f"{customers[customer_key]['company']} - 蓝鲸CRM 方案 {index:02d}",
             'customer_id': customer_ids[customer_key],
             'assigned_to': owner_id,
             'stage': stage,
@@ -1176,7 +1176,7 @@ def init_db():
     os.makedirs(os.path.dirname(root_instance_path), exist_ok=True)
     shutil.copy2(db_path, root_instance_path)
 
-    print("\n八戒CRM 初始化完成。")
+    print("\n蓝鲸CRM 初始化完成。")
     print("默认管理员: admin / admin123")
     print("演示账号: manager_li / demo123, sales_wang / demo123, sales_zhou / demo123, marketing_chen / demo123, service_zhao / demo123")
     print(f"已准备数据: {len(users)} 个用户, {len(customers)} 个客户, {len(leads)} 条线索, {len(opportunities)} 个商机, {len(orders)} 张订单, {len(campaigns)} 个营销活动。")

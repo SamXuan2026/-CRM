@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-八戒CRM - Main Application
+蓝鲸CRM - Main Application
 """
 from flask import Flask
 from flask_cors import CORS
@@ -55,7 +55,7 @@ def create_app():
     @app.route('/')
     def index():
         return {
-            'name': '八戒CRM Backend',
+            'name': '蓝鲸CRM Backend',
             'status': 'running',
             'health': '/health',
             'frontend': 'http://172.16.1.32:3000',
@@ -64,7 +64,7 @@ def create_app():
 
     @app.route('/health')
     def health():
-        return {'status': 'healthy', 'message': '八戒CRM is running'}
+        return {'status': 'healthy', 'message': '蓝鲸CRM is running'}
     
     return app
 
