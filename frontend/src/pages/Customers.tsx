@@ -314,6 +314,7 @@ const Customers: React.FC = () => {
           status: 'success',
           isClosable: true,
         });
+        await fetchCustomers(currentPage);
         onInteractionClose();
         await fetchInteractions(selectedCustomer.id);
         return true;
@@ -940,7 +941,7 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="2xl">
+    <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>
@@ -1254,9 +1255,9 @@ const AddInteractionModal: React.FC<AddInteractionModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} size="lg" scrollBehavior="inside">
       <ModalOverlay />
-      <ModalContent>
+      <ModalContent maxH="calc(100vh - 4rem)">
         <ModalHeader>
           新增互动记录
           <Text mt={1} fontSize="sm" fontWeight="normal" color="gray.500">
