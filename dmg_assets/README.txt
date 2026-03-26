@@ -16,7 +16,8 @@
 - 后端: http://172.16.1.32:5006
 
 说明:
-- 这些启动器默认控制本机目录 /Users/samxuan/sam/code/crm_system 下的项目
-- 日志文件位于 /Users/samxuan/sam/code/crm_system/logs/
+- 这些启动器默认控制当前机器上的 CRM 项目目录
+- 前后端地址和端口由项目根目录 `.env` 中的 `CRM_PUBLIC_HOST`、`CRM_BACKEND_PORT`、`CRM_FRONTEND_PORT` 控制
+- 日志文件位于项目根目录 `logs/`
 - 启动后会自动做健康检查，不再只判断进程是否存在
 - 如果启动失败，窗口里会直接提示查看 backend.log 和 frontend.log

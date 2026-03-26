@@ -23,6 +23,13 @@ class Config:
     JWT_IDENTITY_CLAIM = 'identity'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+
+    # Runtime network settings
+    CRM_PUBLIC_HOST = os.environ.get('CRM_PUBLIC_HOST', '172.16.1.32')
+    BACKEND_PORT = int(os.environ.get('CRM_BACKEND_PORT', 5006))
+    FRONTEND_PORT = int(os.environ.get('CRM_FRONTEND_PORT', 3000))
+    BACKEND_BIND_HOST = os.environ.get('CRM_BACKEND_BIND_HOST', '0.0.0.0')
+    FRONTEND_PUBLIC_URL = f"http://{CRM_PUBLIC_HOST}:{FRONTEND_PORT}"
     
     # Email settings
     MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.gmail.com'

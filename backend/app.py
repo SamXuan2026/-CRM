@@ -77,7 +77,7 @@ def create_app():
             'name': '蓝鲸CRM Backend',
             'status': 'running',
             'health': '/health',
-            'frontend': 'http://172.16.1.32:3000',
+            'frontend': Config.FRONTEND_PUBLIC_URL,
             'api_base': '/api'
         }
 
@@ -89,4 +89,9 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=False, host='0.0.0.0', port=5006, use_reloader=False)
+    app.run(
+        debug=False,
+        host=Config.BACKEND_BIND_HOST,
+        port=Config.BACKEND_PORT,
+        use_reloader=False,
+    )

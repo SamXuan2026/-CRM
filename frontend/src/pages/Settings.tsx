@@ -47,6 +47,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiRequestRaw } from '../services/api';
+import { customerStatusLabelMap } from '../constants/customerLabels';
 
 interface TeamRecord {
   id: number;
@@ -166,6 +167,28 @@ const roleColorMap: Record<string, string> = {
   marketing: 'orange',
   customer_service: 'green',
 };
+
+const opportunityStageLabelMap: Record<string, string> = {
+  lead: '线索',
+  qualification: '需求确认',
+  proposal: '方案报价',
+  negotiation: '商务谈判',
+  won: '已赢单',
+  lost: '已丢单',
+};
+
+const orderStatusLabelMap: Record<string, string> = {
+  pending: '待处理',
+  confirmed: '已确认',
+  processing: '处理中',
+  shipped: '已发货',
+  delivered: '已交付',
+  cancelled: '已取消',
+};
+
+const getCustomerStatusLabel = (status: string) => customerStatusLabelMap[status] || status;
+const getOpportunityStageLabel = (stage: string) => opportunityStageLabelMap[stage] || stage;
+const getOrderStatusLabel = (status: string) => orderStatusLabelMap[status] || status;
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -1104,7 +1127,7 @@ const Settings = () => {
                               <Text fontWeight="700">{item.first_name} {item.last_name}</Text>
                               <Text fontSize="sm" color="gray.500">{item.company || '未填写公司'} · {item.assigned_sales_rep_name || '未分配'}</Text>
                             </Box>
-                            <Badge colorScheme="blue">{item.status}</Badge>
+                            <Badge colorScheme="blue">{getCustomerStatusLabel(item.status)}</Badge>
                           </HStack>
                         ))}
                       </VStack>
@@ -1121,7 +1144,7 @@ const Settings = () => {
                               <Text fontWeight="700">{item.name}</Text>
                               <Text fontSize="sm" color="gray.500">{item.assigned_to_name || '未分配'} · ${item.value.toFixed(2)}</Text>
                             </Box>
-                            <Badge colorScheme="purple">{item.stage}</Badge>
+                            <Badge colorScheme="purple">{getOpportunityStageLabel(item.stage)}</Badge>
                           </HStack>
                         ))}
                       </VStack>
@@ -1138,7 +1161,7 @@ const Settings = () => {
                               <Text fontWeight="700">{item.order_number}</Text>
                               <Text fontSize="sm" color="gray.500">{item.owner_name || '未分配'} · {item.currency} {item.total_amount.toFixed(2)}</Text>
                             </Box>
-                            <Badge colorScheme="green">{item.status}</Badge>
+                            <Badge colorScheme="green">{getOrderStatusLabel(item.status)}</Badge>
                           </HStack>
                         ))}
                       </VStack>

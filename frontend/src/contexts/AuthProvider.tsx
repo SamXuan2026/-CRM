@@ -3,25 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Spinner, VStack, Text } from '@chakra-ui/react';
 import { authApi } from '../services/api';
 import { User, AuthContextType } from './AuthContext';
-
-const getHomeRouteForUser = (user: User | null) => {
-  if (!user) return '/login';
-
-  switch (user.role) {
-    case 'admin':
-    case 'manager':
-    case 'sales_lead':
-      return '/dashboard';
-    case 'sales':
-      return '/customers';
-    case 'marketing':
-      return '/marketing';
-    case 'customer_service':
-      return '/customers';
-    default:
-      return '/settings';
-  }
-};
+import { getDefaultRouteForRole } from '../config/navigation';
 
 /**
  * 权限映射表
@@ -172,7 +154,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           result.refresh_token
         );
         
-        navigate(getHomeRouteForUser(result.user));
+        navigate(getDefaultRouteForRole(result.user?.role));
       } catch (error: any) {
         console.error('Login failed:', error);
         throw error;

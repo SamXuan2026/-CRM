@@ -25,74 +25,7 @@ import {
 } from '@chakra-ui/react';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { AuthContext } from '../contexts/AuthProvider';
-
-const DEMO_ACCOUNTS = [
-  {
-    label: '管理员',
-    username: 'admin',
-    password: 'admin123',
-    description: '查看全部模块、完整报表和全局配置',
-    colorScheme: 'blue',
-    accent: '全局',
-  },
-  {
-    label: '销售组长',
-    username: 'lead_liu',
-    password: 'demo123',
-    description: '演示团队视角、成员管理和本组数据隔离',
-    colorScheme: 'purple',
-    accent: '团队',
-  },
-  {
-    label: '销售成员 A',
-    username: 'sales_wang',
-    password: 'demo123',
-    description: '演示个人客户、商机和订单推进流程',
-    colorScheme: 'blue',
-    accent: '个人',
-  },
-  {
-    label: '销售成员 B',
-    username: 'sales_qian',
-    password: 'demo123',
-    description: '切换到另一销售组，验证跨组数据隔离效果',
-    colorScheme: 'cyan',
-    accent: '隔离',
-  },
-  {
-    label: '营销专员',
-    username: 'marketing_chen',
-    password: 'demo123',
-    description: '演示营销活动、线索转化和投放概览',
-    colorScheme: 'green',
-    accent: '营销',
-  },
-  {
-    label: '客服专员',
-    username: 'service_zhao',
-    password: 'demo123',
-    description: '演示客户服务视角与客户资料维护场景',
-    colorScheme: 'orange',
-    accent: '客服',
-  },
-];
-
-const getDefaultRouteForRole = (role?: string) => {
-  switch (role) {
-    case 'admin':
-    case 'manager':
-    case 'sales_lead':
-      return '/dashboard';
-    case 'sales':
-      return '/customers';
-    case 'marketing':
-      return '/marketing';
-    case 'customer_service':
-      return '/customers';
-    default:
-      return '/settings';
-  }
-};
+import { DEMO_ACCOUNTS, getDefaultRouteForRole } from '../config/navigation';
 
 const PANEL_DESKTOP_HEIGHT = '580px';
 

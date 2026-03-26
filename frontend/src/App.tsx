@@ -40,6 +40,7 @@ import { Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 
 import { AuthContext } from './contexts/AuthProvider';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { getDefaultRouteForRole } from './config/navigation';
 
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -52,23 +53,6 @@ const Settings = lazy(() => import('./pages/Settings'));
 const OnlineDocs = lazy(() => import('./pages/OnlineDocs'));
 
 const APP_VERSION = 'v1.2';
-
-const getDefaultRouteForRole = (role?: string) => {
-  switch (role) {
-    case 'admin':
-    case 'manager':
-    case 'sales_lead':
-      return '/dashboard';
-    case 'sales':
-      return '/customers';
-    case 'marketing':
-      return '/marketing';
-    case 'customer_service':
-      return '/customers';
-    default:
-      return '/settings';
-  }
-};
 
 const App = () => {
   const auth = useContext(AuthContext);

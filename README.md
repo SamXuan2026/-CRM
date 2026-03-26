@@ -83,7 +83,7 @@ crm_system/
 Start both services from the project root:
 
 ```bash
-cd /Users/samxuan/sam/code/crm_system
+cd <project-root>/crm_system
 ./start.sh
 ```
 
@@ -99,14 +99,23 @@ Run the release smoke test:
 ./smoke_test.sh
 ```
 
+Run the full release pipeline:
+
+```bash
+./release.sh
+```
+
 Stop both services:
 
 ```bash
 ./stop.sh
 ```
 
-Logs are written to `crm_system/logs/backend.log` and `crm_system/logs/frontend.log`.
+Logs are written to `logs/backend.log` and `logs/frontend.log`.
 The smoke test validates the frontend production build and runs the backend role-based scenario regression.
+Runtime host and port settings are defined in `.env` via `CRM_PUBLIC_HOST`, `CRM_BACKEND_PORT`, and `CRM_FRONTEND_PORT`.
+When local services are already healthy, `./smoke_test.sh` also runs a frontend page smoke test for demo logins and key routes.
+`./release.sh` runs the smoke test first and then builds the DMG delivery package.
 
 ### Prerequisites
 
@@ -119,7 +128,7 @@ Make sure you have the following installed:
 
 1. Navigate to the backend directory:
 ```bash
-cd /Users/samxuan/sam/code/crm_system/backend
+cd <project-root>/crm_system/backend
 ```
 
 2. Create a virtual environment:
@@ -156,13 +165,13 @@ python ../simple_init_db.py
 python app.py
 ```
 
-The backend will be available at `http://172.16.1.32:5006`.
+The backend will be available at `http://<CRM_PUBLIC_HOST>:<CRM_BACKEND_PORT>` and defaults to `http://172.16.1.32:5006`.
 
 ### Frontend Setup
 
 1. Navigate to the frontend directory:
 ```bash
-cd /Users/samxuan/sam/code/crm_system/frontend
+cd <project-root>/crm_system/frontend
 ```
 
 2. Install dependencies:
@@ -175,7 +184,7 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://172.16.1.32:3000`.
+The frontend will be available at `http://<CRM_PUBLIC_HOST>:<CRM_FRONTEND_PORT>` and defaults to `http://172.16.1.32:3000`.
 
 ## API Endpoints
 

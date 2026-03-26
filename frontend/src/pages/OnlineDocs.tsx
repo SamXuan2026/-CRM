@@ -665,8 +665,8 @@ const OnlineDocs = () => {
 
                 <SectionCard id="design-deploy" title="6. 部署与运行设计">
                 <OrderedList spacing={3} color="gray.700" pl={4}>
-                  <ListItem>前端监听 `172.16.1.32:3000`，后端监听 `172.16.1.32:5006`，支持局域网访问。</ListItem>
-                  <ListItem>通过 `start.sh`、`stop.sh`、`status.sh` 管理服务生命周期。</ListItem>
+                  <ListItem>前端与后端默认通过 `.env` 中的 `CRM_PUBLIC_HOST`、`CRM_FRONTEND_PORT`、`CRM_BACKEND_PORT` 对外暴露，默认局域网地址为 `172.16.1.32:3000/5006`。</ListItem>
+                  <ListItem>通过 `start.sh`、`stop.sh`、`status.sh` 管理服务生命周期，并通过健康检查确认真实状态。</ListItem>
                   <ListItem>通过 DMG 启动器封装桌面端双击启动能力，便于演示与交付。</ListItem>
                   <ListItem>通过初始化脚本刷新演示数据，确保客户、互动、商机和订单链路完整。</ListItem>
                 </OrderedList>
@@ -699,8 +699,8 @@ const OnlineDocs = () => {
                 <BlueprintCard
                   title="访问地址"
                   items={[
-                    'CRM 前端：`http://172.16.1.32:3000`',
-                    '后端健康检查：`http://172.16.1.32:5006/health`',
+                    'CRM 前端：默认 `http://172.16.1.32:3000`，也可由 `.env` 配置覆盖。',
+                    '后端健康检查：默认 `http://172.16.1.32:5006/health`。',
                   ]}
                 />
                 <BlueprintCard
@@ -947,10 +947,10 @@ const OnlineDocs = () => {
 
                 <SectionCard id="roadmap-ops" title="4. 部署与运维优化">
                   <OrderedList spacing={3} color="gray.700" pl={4}>
-                    <ListItem>将前后端改造成更稳定的守护启动方式，避免进程退出后页面不可用。</ListItem>
-                    <ListItem>增强 `status.sh`，输出前端、后端、数据库、端口和局域网入口的完整检查结果。</ListItem>
+                    <ListItem>将前后端改造成更稳定的守护启动方式，进一步降低进程退出后页面不可用的概率。</ListItem>
+                    <ListItem>继续增强 `status.sh`，补充数据库和配置摘要等运维诊断信息。</ListItem>
                     <ListItem>增加 SQLite 自动备份和恢复说明，降低演示数据和本地数据丢失风险。</ListItem>
-                    <ListItem>整理标准部署清单，统一 `.env`、端口、IP、脚本和初始化流程。</ListItem>
+                    <ListItem>继续整理标准部署清单，统一 `.env`、端口、IP、脚本和初始化流程。</ListItem>
                   </OrderedList>
                 </SectionCard>
 
