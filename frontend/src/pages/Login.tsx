@@ -31,33 +31,49 @@ const DEMO_ACCOUNTS = [
     label: '管理员',
     username: 'admin',
     password: 'admin123',
-    description: '可查看全部模块和完整报表数据',
+    description: '查看全部模块、完整报表和全局配置',
     colorScheme: 'blue',
-    accent: '全局视角',
+    accent: '全局',
   },
   {
-    label: '销售',
+    label: '销售组长',
+    username: 'lead_liu',
+    password: 'demo123',
+    description: '演示团队视角、成员管理和本组数据隔离',
+    colorScheme: 'purple',
+    accent: '团队',
+  },
+  {
+    label: '销售成员 A',
     username: 'sales_wang',
     password: 'demo123',
-    description: '适合演示客户、商机和订单跟进',
+    description: '演示个人客户、商机和订单推进流程',
     colorScheme: 'blue',
-    accent: '推荐体验',
+    accent: '个人',
   },
   {
-    label: '销售二组',
-    username: 'sales_zhou',
+    label: '销售成员 B',
+    username: 'sales_qian',
     password: 'demo123',
-    description: '可切换查看另一条销售线索路径',
+    description: '切换到另一销售组，验证跨组数据隔离效果',
     colorScheme: 'cyan',
-    accent: '数据隔离',
+    accent: '隔离',
   },
   {
-    label: '营销',
+    label: '营销专员',
     username: 'marketing_chen',
     password: 'demo123',
-    description: '适合演示活动、线索和总览报表',
+    description: '演示营销活动、线索转化和投放概览',
     colorScheme: 'green',
-    accent: '活动视角',
+    accent: '营销',
+  },
+  {
+    label: '客服专员',
+    username: 'service_zhao',
+    password: 'demo123',
+    description: '演示客户服务视角与客户资料维护场景',
+    colorScheme: 'orange',
+    accent: '客服',
   },
 ];
 
@@ -65,6 +81,7 @@ const getDefaultRouteForRole = (role?: string) => {
   switch (role) {
     case 'admin':
     case 'manager':
+    case 'sales_lead':
       return '/dashboard';
     case 'sales':
       return '/customers';
@@ -77,7 +94,7 @@ const getDefaultRouteForRole = (role?: string) => {
   }
 };
 
-const PANEL_DESKTOP_HEIGHT = '640px';
+const PANEL_DESKTOP_HEIGHT = '580px';
 
 /**
  * Login 页面
@@ -225,25 +242,25 @@ const Login = () => {
     >
       <Container maxW="container.xl">
         <Flex
-          direction={{ base: 'column', lg: 'row' }}
+          direction={{ base: 'column', xl: 'row' }}
           align="stretch"
           justify="center"
           gap={{ base: 8, lg: 8 }}
         >
-          <Box flex="0 0 520px" maxW="100%">
+          <Box flex={{ base: '1', xl: '0 0 480px' }} maxW={{ base: '100%', xl: '480px' }}>
             <Box
               bg="rgba(255,255,255,0.94)"
-              p={{ base: 6, lg: 8 }}
+              p={{ base: 6, lg: 7 }}
               rounded="3xl"
               boxShadow="0 18px 55px rgba(18, 61, 117, 0.12)"
               as="form"
               onSubmit={handleSubmit}
               border="1px solid rgba(255,255,255,0.45)"
-              h={{ base: 'auto', lg: PANEL_DESKTOP_HEIGHT }}
+              minH={{ base: 'auto', xl: PANEL_DESKTOP_HEIGHT }}
               display="flex"
               flexDirection="column"
             >
-              <Box mb={5} textAlign={{ base: 'center', lg: 'left' }}>
+              <Box mb={4} textAlign={{ base: 'center', lg: 'left' }}>
                 <Text fontSize="xs" letterSpacing="0.12em" textTransform="uppercase" color="gray.500">
                   Workspace
                 </Text>
@@ -253,21 +270,21 @@ const Login = () => {
                 <Text color="gray.600" fontSize="sm">
                   集中管理客户数据，优化销售流程
                 </Text>
-                <Text color="gray.500" fontSize="xs" mt={2}>
+                <Text color="gray.500" fontSize="xs" mt={1.5}>
                   首次体验建议直接使用右侧演示账号，无需手动记忆用户名和密码
                 </Text>
               </Box>
 
             {/* 错误提示 */}
             {error && (
-              <Alert status="error" rounded="md" mb={6}>
+              <Alert status="error" rounded="md" mb={4}>
                 <AlertIcon />
                 {error}
               </Alert>
             )}
 
             {/* 用户名/邮箱输入 */}
-            <FormControl mb={4} isRequired>
+            <FormControl mb={3.5} isRequired>
               <FormLabel fontWeight="bold" color="gray.700">
                 用户名或邮箱
               </FormLabel>
@@ -276,7 +293,7 @@ const Login = () => {
                 placeholder="请输入用户名或邮箱"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                size="lg"
+                size="md"
                 isDisabled={isLoading}
                 border="2px"
                 borderColor="gray.200"
@@ -288,11 +305,11 @@ const Login = () => {
             </FormControl>
 
             {/* 密码输入 */}
-            <FormControl mb={6} isRequired>
+            <FormControl mb={4} isRequired>
               <FormLabel fontWeight="bold" color="gray.700">
                 密码
               </FormLabel>
-              <InputGroup size="lg">
+              <InputGroup size="md">
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="请输入密码"
@@ -322,11 +339,11 @@ const Login = () => {
             <Button
               type="submit"
               width="100%"
-              size="lg"
+              size="md"
               colorScheme="blue"
               isLoading={isLoading}
               loadingText="登录中..."
-              mb={3}
+              mb={2.5}
             >
               登录
             </Button>
@@ -334,7 +351,7 @@ const Login = () => {
             {/* 演示登录按钮 */}
             <Button
               width="100%"
-              size="lg"
+              size="md"
               variant="outline"
               colorScheme="purple"
               onClick={handleDemoLogin}
@@ -345,7 +362,7 @@ const Login = () => {
             </Button>
 
             {/* 分割线 */}
-            <Divider my={5} />
+            <Divider my={4} />
 
             {/* 注册链接 */}
             <Text textAlign="center" color="gray.600" fontSize="sm">
@@ -360,36 +377,41 @@ const Login = () => {
               {/* 演示账户信息 */}
               <Box
                 bg="whiteAlpha.800"
-                p={3.5}
+                p={2.5}
                 rounded="2xl"
                 border="1px"
                 borderColor="orange.100"
                 mt="auto"
               >
-                <Text fontSize="sm" fontWeight="bold" color="orange.800" mb={1.5}>
-                  登录提示
-                </Text>
-                <VStack spacing={1} align="start" fontSize="xs" color="orange.900">
-                  <Text>如果浏览器自动填充了旧密码，请先清空后再点“一键登录”或“填入账号”。</Text>
-                  <Text>销售账号推荐使用 `sales_wang / demo123` 或 `sales_zhou / demo123`。</Text>
-                  <Text>营销演示账号为 `marketing_chen / demo123`，管理员账号为 `admin / admin123`。</Text>
+                <HStack justify="space-between" mb={1}>
+                  <Text fontSize="sm" fontWeight="bold" color="orange.800">
+                    登录提示
+                  </Text>
+                  <Badge colorScheme="orange" variant="subtle" borderRadius="full" px={2}>
+                    Demo
+                  </Badge>
+                </HStack>
+                <VStack spacing={0.5} align="start" fontSize="11px" color="orange.900">
+                  <Text>推荐优先使用右侧“一键登录”，避免浏览器旧密码干扰。</Text>
+                  <Text>组长可用 `lead_liu / demo123`，销售可用 `sales_wang / demo123` 或 `sales_qian / demo123`。</Text>
+                  <Text>营销 `marketing_chen / demo123`，管理员 `admin / admin123`。</Text>
                 </VStack>
               </Box>
             </Box>
           </Box>
 
-          <Box flex="0 0 520px" maxW="100%">
+          <Box flex={{ base: '1', xl: '0 0 580px' }} maxW={{ base: '100%', xl: '580px' }}>
             <Box
               bg="rgba(255,255,255,0.94)"
               border="1px solid rgba(255,255,255,0.45)"
               borderRadius="32px"
-              p={{ base: 6, lg: 8 }}
+              p={{ base: 6, lg: 7 }}
               boxShadow="0 18px 55px rgba(64, 38, 17, 0.12)"
-              h={{ base: 'auto', lg: PANEL_DESKTOP_HEIGHT }}
+              minH={{ base: 'auto', xl: PANEL_DESKTOP_HEIGHT }}
               display="flex"
               flexDirection="column"
             >
-              <HStack justify="space-between" align="start" mb={5}>
+              <HStack justify="space-between" align="start" mb={4}>
                 <Box>
                   <Text fontSize="xs" letterSpacing="0.12em" textTransform="uppercase" color="gray.500">
                     Demo Access
@@ -397,17 +419,17 @@ const Login = () => {
                   <Heading size="lg" mt={2} color="gray.800">
                     演示账号快捷入口
                   </Heading>
-                  <Text mt={2} fontSize="sm" color="gray.600">
-                    用更统一的栅格节奏，直接切换不同角色视角。
+                  <Text mt={1.5} fontSize="sm" color="gray.600">
+                    按不同体验场景快速进入系统，不必手动输入账号密码。
                   </Text>
                 </Box>
               </HStack>
 
               <Grid
                 templateColumns={{ base: '1fr', md: 'repeat(2, minmax(0, 1fr))' }}
-                gap={3}
-                flex="1"
-                alignContent="stretch"
+                gap={2}
+                alignContent="start"
+                autoRows="auto"
               >
                 {DEMO_ACCOUNTS.map((account) => (
                   <GridItem
@@ -416,13 +438,12 @@ const Login = () => {
                     <Box
                     bg="rgba(248, 244, 238, 0.92)"
                     border="1px solid rgba(226, 213, 193, 0.75)"
-                    borderRadius="22px"
-                    px={3.5}
-                    py={3}
+                    borderRadius="18px"
+                    px={2.5}
+                    py={1.75}
                     position="relative"
                     overflow="hidden"
-                    h="100%"
-                    minH={{ base: 'auto', md: '198px' }}
+                    minH={{ base: 'auto', md: '128px' }}
                   >
                     <Box
                       position="absolute"
@@ -432,40 +453,37 @@ const Login = () => {
                       bg={`${account.colorScheme}.400`}
                       opacity={0.9}
                     />
-                    <VStack align="stretch" spacing={1.5} h="100%">
-                      <Box flex="1">
-                        <HStack justify="space-between" align="center" spacing={2} mb={1}>
+                    <VStack align="stretch" spacing={1}>
+                      <Box>
+                        <HStack justify="space-between" align="start" spacing={2} mb={0.25}>
                           <HStack spacing={2}>
-                            <Text fontWeight="700" color="gray.800" fontSize="sm">
+                            <Text fontWeight="700" color="gray.800" fontSize="xs" noOfLines={1}>
                               {account.label}
                             </Text>
-                            <Badge colorScheme={account.colorScheme} borderRadius="full" px={2.5}>
+                            <Badge colorScheme={account.colorScheme} borderRadius="full" px={2} fontSize="10px">
                               {account.accent}
                             </Badge>
                           </HStack>
-                          <Badge variant="subtle" colorScheme={account.colorScheme} fontSize="10px" px={2}>
-                            DEMO
-                          </Badge>
                         </HStack>
-                        <Text fontSize="xs" color="gray.600" lineHeight="1.5" noOfLines={2}>
+                        <Text fontSize="10px" color="gray.600" lineHeight="1.4" noOfLines={2}>
                           {account.description}
                         </Text>
-                        <VStack align="stretch" spacing={0.5} mt={2}>
-                          <Text fontSize="xs" color="gray.700" lineHeight="1.45">
+                        <VStack align="stretch" spacing={0.25} mt={0.75}>
+                          <Text fontSize="10px" color="gray.700" lineHeight="1.35">
                             <Text as="span" fontWeight="700">账号</Text>
                             {' · '}
                             {account.username}
                           </Text>
-                          <Text fontSize="xs" color="gray.700" lineHeight="1.45">
+                          <Text fontSize="10px" color="gray.700" lineHeight="1.35">
                             <Text as="span" fontWeight="700">密码</Text>
                             {' · '}
                             {account.password}
                           </Text>
                         </VStack>
                       </Box>
-                      <HStack pt={1.5} spacing={2} mt="auto">
+                      <HStack pt={0.5} spacing={1.5}>
                         <Button
-                          size="sm"
+                          size="xs"
                           variant="outline"
                           flex="1"
                           onClick={() => fillDemoAccount(account.username, account.password)}
@@ -474,7 +492,7 @@ const Login = () => {
                           填入账号
                         </Button>
                         <Button
-                          size="sm"
+                          size="xs"
                           colorScheme={account.colorScheme}
                           flex="1"
                           onClick={() => handleQuickLogin(account.username, account.password)}

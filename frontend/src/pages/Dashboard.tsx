@@ -26,6 +26,7 @@ import { Link as RouterLink } from 'react-router-dom';
 
 import { reportsApi } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { customerStatusLabelMap } from '../constants/customerLabels';
 
 interface DashboardData {
   metrics: {
@@ -123,11 +124,8 @@ const formatCurrency = (value: number) =>
   }).format(value || 0);
 
 const labelMap: Record<string, string> = {
-  lead: '线索',
-  prospect: '潜在客户',
-  customer: '已成交客户',
+  ...customerStatusLabelMap,
   active: '活跃',
-  inactive: '沉默客户',
   new: '新线索',
   contacted: '已接触',
   qualified: '已确认',

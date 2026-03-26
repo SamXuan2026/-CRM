@@ -70,6 +70,8 @@ const theme = extendTheme({
         borderRadius: 'full',
         px: 3,
         py: 1,
+        fontSize: 'sm',
+        fontWeight: '700',
       },
     },
     Tabs: {
@@ -86,6 +88,65 @@ const theme = extendTheme({
           tablist: {
             gap: 2,
             borderBottom: 'none',
+          },
+        },
+      },
+    },
+    Table: {
+      baseStyle: {
+        table: {
+          borderCollapse: 'separate',
+          borderSpacing: '0',
+        },
+        th: {
+          bg: 'brand.50',
+          color: 'brand.700',
+          fontSize: 'sm',
+          fontWeight: '800',
+          letterSpacing: '0.04em',
+          textTransform: 'none',
+          py: 4,
+          borderColor: 'blue.100',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+          boxShadow: 'inset 0 -1px 0 rgba(143, 180, 224, 0.55)',
+        },
+        td: {
+          fontSize: 'sm',
+          fontWeight: '500',
+          color: 'gray.700',
+          py: 4,
+          borderColor: 'blue.50',
+        },
+        tbody: {
+          tr: {
+            transition: 'background-color 0.18s ease, transform 0.18s ease',
+            _hover: {
+              bg: 'rgba(47, 128, 237, 0.04)',
+            },
+          },
+        },
+      },
+      sizes: {
+        sm: {
+          th: {
+            fontSize: 'sm',
+            py: 3.5,
+          },
+          td: {
+            fontSize: 'sm',
+            py: 3.5,
+          },
+        },
+        md: {
+          th: {
+            fontSize: 'md',
+            py: 4.5,
+          },
+          td: {
+            fontSize: 'md',
+            py: 4.5,
           },
         },
       },

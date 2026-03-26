@@ -351,6 +351,44 @@ export const usersApi = {
 };
 
 /**
+ * 销售组管理 API
+ */
+export const teamsApi = {
+  list: (params?: PaginationParams) =>
+    apiRequest<any[]>({
+      method: 'GET',
+      url: '/teams',
+      params,
+    }),
+
+  get: (teamId: number) =>
+    apiRequest<any>({
+      method: 'GET',
+      url: `/teams/${teamId}`,
+    }),
+
+  create: (data: any) =>
+    apiRequest<any>({
+      method: 'POST',
+      url: '/teams',
+      data,
+    }),
+
+  update: (teamId: number, data: any) =>
+    apiRequest<any>({
+      method: 'PUT',
+      url: `/teams/${teamId}`,
+      data,
+    }),
+
+  members: (teamId: number) =>
+    apiRequest<any[]>({
+      method: 'GET',
+      url: `/teams/${teamId}/members`,
+    }),
+};
+
+/**
  * 客户管理 API
  */
 export const customersApi = {

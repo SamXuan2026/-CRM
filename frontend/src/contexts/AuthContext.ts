@@ -7,10 +7,13 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  role: 'admin' | 'manager' | 'sales' | 'marketing' | 'customer_service';
+  role: 'admin' | 'manager' | 'sales_lead' | 'sales' | 'marketing' | 'customer_service';
   first_name?: string;
   last_name?: string;
   phone?: string;
+  team_id?: number | null;
+  team_name?: string | null;
+  is_team_lead?: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -57,8 +60,14 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'marketing:create', 'marketing:read', 'marketing:update',
     'reports:read', 'reports:export',
   ],
+  sales_lead: [
+    'users:create', 'users:read', 'users:update',
+    'customers:create', 'customers:read', 'customers:update',
+    'sales:create', 'sales:read', 'sales:update',
+    'reports:read', 'reports:export',
+  ],
   sales: [
-    'customers:read', 'customers:update',
+    'customers:create', 'customers:read', 'customers:update',
     'sales:create', 'sales:read', 'sales:update',
     'reports:read',
   ],

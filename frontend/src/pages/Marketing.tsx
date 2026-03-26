@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
+  Card,
+  CardBody,
+  CardHeader,
   Input,
   Table,
   Thead,
@@ -41,6 +44,10 @@ import {
   Progress,
 } from '@chakra-ui/react';
 import { apiRequestRaw } from '../services/api';
+import { ListRefreshingOverlay } from '../components/ListRefreshingOverlay';
+import { ListDensity, ListDensityToggle } from '../components/ListDensityToggle';
+import { SortableTh, SortOrder } from '../components/SortableTh';
+import { useDebouncedSearchInput } from '../hooks/useDebouncedSearchInput';
 
 interface MarketingCampaign {
   id: number;
@@ -54,6 +61,8 @@ interface MarketingCampaign {
   target_audience?: string;
   channel: string;
   manager_id: number;
+  manager_name?: string | null;
+  manager_team_name?: string | null;
   created_at: string;
 }
 
@@ -64,6 +73,8 @@ interface Lead {
   status: string;
   source: string;
   value: number;
+  assigned_to_name?: string | null;
+  assigned_team_name?: string | null;
   expected_close_date?: string;
   notes?: string;
   created_at: string;
@@ -92,21 +103,31 @@ interface CustomerOption {
   label: string;
 }
 
+const formatCurrency = (value?: number, currencySymbol: string = '$') =>
+  `${currencySymbol}${value?.toFixed(2) || '0.00'}`;
+
 const Marketing: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [campaignStats, setCampaignStats] = useState<CampaignStats | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [leadsLoading, setLeadsLoading] = useState(true);
   const [campPage, setCampPage] = useState(1);
   const [leadPage, setLeadPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [campTotalPages, setCampTotalPages] = useState(1);
   const [leadTotalPages, setLeadTotalPages] = useState(1);
-  const [campSearch, setCampSearch] = useState('');
+  const [tableDensity, setTableDensity] = useState<ListDensity>('comfortable');
+  const { searchValue: campSearch, bindInput: campSearchInputProps } = useDebouncedSearchInput();
+  const [campaignSortBy, setCampaignSortBy] = useState('start_date');
+  const [campaignSortOrder, setCampaignSortOrder] = useState<SortOrder>('desc');
   const [statusFilter, setStatusFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
+  const { searchValue: leadSearch, bindInput: leadSearchInputProps } = useDebouncedSearchInput();
+  const [leadSortBy, setLeadSortBy] = useState('created_at');
+  const [leadSortOrder, setLeadSortOrder] = useState<SortOrder>('desc');
   const [leadStatusFilter, setLeadStatusFilter] = useState('');
   const [leadSourceFilter, setLeadSourceFilter] = useState('');
   const [selectedCampaign, setSelectedCampaign] = useState<MarketingCampaign | null>(null);
@@ -137,7 +158,7 @@ const Marketing: React.FC = () => {
   // Fetch campaigns
   const fetchCampaigns = async (page: number = 1) => {
     try {
-      setLoading(true);
+      setCampaignsLoading(true);
       const params: Record<string, any> = {
         page,
         per_page: pageSize,
@@ -145,6 +166,8 @@ const Marketing: React.FC = () => {
       if (campSearch) params.search = campSearch;
       if (statusFilter) params.status = statusFilter;
       if (channelFilter) params.channel = channelFilter;
+      params.sort_by = campaignSortBy;
+      params.sort_order = campaignSortOrder;
 
       const response = await apiRequestRaw('GET', '/marketing/campaigns', undefined, params);
 
@@ -162,20 +185,23 @@ const Marketing: React.FC = () => {
         isClosable: true,
       });
     } finally {
-      setLoading(false);
+      setCampaignsLoading(false);
     }
   };
 
   // Fetch leads
   const fetchLeads = async (page: number = 1) => {
     try {
-      setLoading(true);
+      setLeadsLoading(true);
       const params: Record<string, any> = {
         page,
         per_page: pageSize,
       };
+      if (leadSearch) params.search = leadSearch;
       if (leadStatusFilter) params.status = leadStatusFilter;
       if (leadSourceFilter) params.source = leadSourceFilter;
+      params.sort_by = leadSortBy;
+      params.sort_order = leadSortOrder;
 
       const response = await apiRequestRaw('GET', '/marketing/leads', undefined, params);
 
@@ -192,7 +218,7 @@ const Marketing: React.FC = () => {
         isClosable: true,
       });
     } finally {
-      setLoading(false);
+      setLeadsLoading(false);
     }
   };
 
@@ -260,7 +286,27 @@ const Marketing: React.FC = () => {
       fetchLeads(1);
       fetchLeadStats();
     }
-  }, [activeTab, campSearch, statusFilter, channelFilter, leadStatusFilter, leadSourceFilter, pageSize]);
+  }, [activeTab, campSearch, statusFilter, channelFilter, leadSearch, leadStatusFilter, leadSourceFilter, pageSize, campaignSortBy, campaignSortOrder, leadSortBy, leadSortOrder]);
+
+  const handleCampaignSortToggle = (column: string) => {
+    if (campaignSortBy === column) {
+      setCampaignSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setCampaignSortBy(column);
+    setCampaignSortOrder(['budget', 'spent', 'name'].includes(column) ? 'asc' : 'desc');
+  };
+
+  const handleLeadSortToggle = (column: string) => {
+    if (leadSortBy === column) {
+      setLeadSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setLeadSortBy(column);
+    setLeadSortOrder(column === 'created_at' ? 'desc' : 'asc');
+  };
 
   const handleCreateCampaign = async (data: Partial<MarketingCampaign>) => {
     try {
@@ -426,6 +472,58 @@ const Marketing: React.FC = () => {
     return colors[status] || 'gray';
   };
 
+  const getCampaignStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      planned: '计划中',
+      active: '已激活',
+      completed: '已完成',
+      paused: '已暂停',
+    };
+    return labels[status] || status;
+  };
+
+  const getChannelLabel = (channel: string) => {
+    const labels: Record<string, string> = {
+      email: '邮件',
+      social: '社交媒体',
+      sms: '短信',
+      direct: '直邮',
+    };
+    return labels[channel] || channel;
+  };
+
+  const getLeadSourceLabel = (source: string) => {
+    const labels: Record<string, string> = {
+      email: '邮件',
+      phone: '电话',
+      website: '官网',
+      referral: '转介绍',
+      event: '活动',
+    };
+    return labels[source] || source;
+  };
+
+  const getCustomerLabel = (customerId: number) =>
+    customerOptions.find((customer) => customer.id === customerId)?.label || `客户 #${customerId}`;
+
+  const getLeadStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      new: '新线索',
+      contacted: '已接触',
+      qualified: '已确认',
+      proposal: '方案中',
+      converted: '已转化',
+      lost: '已流失',
+    };
+    return labels[status] || status;
+  };
+
+  const campaignStatusItems = Object.entries(campaignStats?.campaigns_by_status || {}).sort((a, b) => b[1] - a[1]);
+  const channelItems = Object.entries(campaignStats?.campaigns_by_channel || {}).sort((a, b) => b[1] - a[1]);
+  const leadSourceItems = Object.entries(leadStats?.leads_by_source || {}).sort((a, b) => b[1] - a[1]);
+  const maxCampaignStatus = Math.max(...campaignStatusItems.map(([, value]) => value), 1);
+  const maxLeadSource = Math.max(...leadSourceItems.map(([, value]) => value), 1);
+
   return (
     <Box p={6}>
       <Tabs index={activeTab} onChange={setActiveTab}>
@@ -440,7 +538,7 @@ const Marketing: React.FC = () => {
             {/* Campaign Stats */}
             {campaignStats && (
               <StatGroup mb={6}>
-                <SimpleGrid columns={4} spacing={4} w="full">
+                <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} spacing={4} w="full">
                   <Stat>
                     <StatLabel>活动总数</StatLabel>
                     <StatNumber>{campaignStats.total_campaigns}</StatNumber>
@@ -451,11 +549,11 @@ const Marketing: React.FC = () => {
                   </Stat>
                   <Stat>
                     <StatLabel>总预算</StatLabel>
-                    <StatNumber>${campaignStats.total_budget.toFixed(2)}</StatNumber>
+                    <StatNumber>{formatCurrency(campaignStats.total_budget)}</StatNumber>
                   </Stat>
                   <Stat>
                     <StatLabel>已花费</StatLabel>
-                    <StatNumber>${campaignStats.total_spent.toFixed(2)}</StatNumber>
+                    <StatNumber>{formatCurrency(campaignStats.total_spent)}</StatNumber>
                   </Stat>
                 </SimpleGrid>
                 <Box mt={4}>
@@ -466,43 +564,93 @@ const Marketing: React.FC = () => {
               </StatGroup>
             )}
 
+            {campaignStats && (
+              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={6} mb={6}>
+                <Card bg="rgba(255,255,255,0.95)" borderRadius="28px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)">
+                  <CardHeader pb={0}>
+                    <Text fontSize="lg" fontWeight="700" color="gray.800">活动状态分布</Text>
+                    <Text fontSize="sm" color="gray.500">查看当前活动池推进进度</Text>
+                  </CardHeader>
+                  <CardBody>
+                    <VStack align="stretch" spacing={4}>
+                      {campaignStatusItems.map(([status, count]) => (
+                        <Box key={status}>
+                          <HStack justify="space-between" mb={1.5}>
+                            <Text fontSize="sm" color="gray.700">{getCampaignStatusLabel(status)}</Text>
+                            <Text fontSize="sm" fontWeight="700" color="gray.800">{count}</Text>
+                          </HStack>
+                          <Progress
+                            value={(count / maxCampaignStatus) * 100}
+                            colorScheme={getCampaignStatusColor(status)}
+                            borderRadius="full"
+                            bg="gray.100"
+                          />
+                        </Box>
+                      ))}
+                    </VStack>
+                  </CardBody>
+                </Card>
+                <Card bg="rgba(255,255,255,0.95)" borderRadius="28px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)">
+                  <CardHeader pb={0}>
+                    <Text fontSize="lg" fontWeight="700" color="gray.800">渠道投放焦点</Text>
+                    <Text fontSize="sm" color="gray.500">当前活动最集中的渠道结构</Text>
+                  </CardHeader>
+                  <CardBody>
+                    <VStack align="stretch" spacing={4}>
+                      {channelItems.map(([channel, count]) => (
+                        <HStack key={channel} justify="space-between">
+                          <Text fontSize="sm" color="gray.700">{getChannelLabel(channel)}</Text>
+                          <Text fontSize="sm" fontWeight="700" color="gray.800">{count}</Text>
+                        </HStack>
+                      ))}
+                    </VStack>
+                  </CardBody>
+                </Card>
+              </SimpleGrid>
+            )}
+
             {/* Filter and Search */}
-            <HStack mb={4} spacing={4}>
-              <Input
-                placeholder="按活动名称搜索"
-                value={campSearch}
-                onChange={(e) => setCampSearch(e.target.value)}
-                width="300px"
-              />
-              <Select
-                placeholder="按状态筛选"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                width="200px"
-              >
-                <option value="planned">计划中</option>
-                <option value="active">已激活</option>
-                <option value="completed">已完成</option>
-                <option value="paused">已暂停</option>
-              </Select>
-              <Select
-                placeholder="按渠道筛选"
-                value={channelFilter}
-                onChange={(e) => setChannelFilter(e.target.value)}
-                width="200px"
-              >
-                <option value="email">邮件</option>
-                <option value="social">社交媒体</option>
-                <option value="sms">SMS</option>
-                <option value="direct">直邮</option>
-              </Select>
-              <Button colorScheme="blue" onClick={onCampCreateOpen}>
-                + 新建活动
-              </Button>
+            <HStack mb={4} spacing={4} justify="space-between" align="start" wrap="wrap">
+              <HStack spacing={4} wrap="wrap" flex="1">
+                <Input
+                  placeholder="按活动名称搜索"
+                  {...campSearchInputProps}
+                  width="300px"
+                />
+                <Select
+                  placeholder="按状态筛选"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  width="200px"
+                >
+                  <option value="planned">计划中</option>
+                  <option value="active">已激活</option>
+                  <option value="completed">已完成</option>
+                  <option value="paused">已暂停</option>
+                </Select>
+                <Select
+                  placeholder="按渠道筛选"
+                  value={channelFilter}
+                  onChange={(e) => setChannelFilter(e.target.value)}
+                  width="200px"
+                >
+                  <option value="email">邮件</option>
+                  <option value="social">社交媒体</option>
+                  <option value="sms">SMS</option>
+                  <option value="direct">直邮</option>
+                </Select>
+                <Button colorScheme="blue" onClick={onCampCreateOpen}>
+                  + 新建活动
+                </Button>
+              </HStack>
+              <HStack spacing={3}>
+                <Text fontSize="sm" fontWeight="600" color="gray.500">列表密度</Text>
+                <ListDensityToggle value={tableDensity} onChange={setTableDensity} />
+              </HStack>
             </HStack>
 
             {/* Campaigns Table */}
-            {loading ? (
+            {campaignsLoading && campaigns.length === 0 ? (
               <Box textAlign="center" py={10}>
                 <Spinner />
               </Box>
@@ -510,50 +658,79 @@ const Marketing: React.FC = () => {
               <Text>暂无营销活动</Text>
             ) : (
               <>
-                <Box overflowX="auto">
-                  <Table variant="simple">
-                    <Thead>
-                      <Tr>
-                        <Th>活动名称</Th>
-                        <Th>状态</Th>
-                        <Th>渠道</Th>
-                        <Th>预算</Th>
-                        <Th>花费</Th>
-                        <Th>周期</Th>
-                        <Th>操作</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {campaigns.map((campaign) => (
-                        <Tr key={campaign.id}>
-                          <Td>{campaign.name}</Td>
-                          <Td>
-                            <Badge colorScheme={getCampaignStatusColor(campaign.status)}>
-                              {campaign.status}
-                            </Badge>
-                          </Td>
-                          <Td>{campaign.channel}</Td>
-                          <Td>${campaign.budget.toFixed(2)}</Td>
-                          <Td>${campaign.spent.toFixed(2)}</Td>
-                          <Td fontSize="xs">
-                            {new Date(campaign.start_date).toLocaleDateString()} 
-                            {campaign.end_date && ` - ${new Date(campaign.end_date).toLocaleDateString()}`}
-                          </Td>
-                          <Td>
-                            <Button
-                              size="xs"
-                              onClick={() => {
-                                setSelectedCampaign(campaign);
-                                onCampDetailOpen();
-                              }}
-                            >
-                              查看
-                            </Button>
-                          </Td>
+                <Box position="relative">
+                  {campaignsLoading && (
+                    <HStack
+                      justify="space-between"
+                      px={3}
+                      py={2}
+                      mb={3}
+                      borderRadius="16px"
+                      bg="blue.50"
+                      color="gray.600"
+                      fontSize="sm"
+                    >
+                      <Text>正在刷新活动列表...</Text>
+                      <Spinner size="sm" color="blue.500" />
+                    </HStack>
+                  )}
+                  <Box
+                    overflowX="auto"
+                    opacity={campaignsLoading ? 0.72 : 1}
+                    transition="opacity 0.18s ease"
+                  >
+                    <Table variant="simple" size={tableDensity === 'comfortable' ? 'md' : 'sm'}>
+                      <Thead>
+                        <Tr>
+                          <SortableTh label="活动名称" column="name" activeSortBy={campaignSortBy} activeSortOrder={campaignSortOrder} onToggle={handleCampaignSortToggle} />
+                          <SortableTh label="状态" column="status" activeSortBy={campaignSortBy} activeSortOrder={campaignSortOrder} onToggle={handleCampaignSortToggle} />
+                          <SortableTh label="渠道" column="channel" activeSortBy={campaignSortBy} activeSortOrder={campaignSortOrder} onToggle={handleCampaignSortToggle} />
+                          <Th>负责人</Th>
+                          <SortableTh label="预算" column="budget" activeSortBy={campaignSortBy} activeSortOrder={campaignSortOrder} onToggle={handleCampaignSortToggle} />
+                          <SortableTh label="花费" column="spent" activeSortBy={campaignSortBy} activeSortOrder={campaignSortOrder} onToggle={handleCampaignSortToggle} />
+                          <SortableTh label="周期" column="start_date" activeSortBy={campaignSortBy} activeSortOrder={campaignSortOrder} onToggle={handleCampaignSortToggle} />
+                          <Th>操作</Th>
                         </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                      </Thead>
+                      <Tbody>
+                        {campaigns.map((campaign) => (
+                          <Tr key={campaign.id}>
+                            <Td>{campaign.name}</Td>
+                            <Td>
+                              <Badge colorScheme={getCampaignStatusColor(campaign.status)}>
+                                {getCampaignStatusLabel(campaign.status)}
+                              </Badge>
+                            </Td>
+                            <Td>{getChannelLabel(campaign.channel)}</Td>
+                            <Td>
+                              <VStack align="start" spacing={0.5}>
+                                <Text fontSize="sm" color="gray.700">{campaign.manager_name || '未指定'}</Text>
+                                <Text fontSize="sm" color="gray.500">{campaign.manager_team_name || '未分组'}</Text>
+                              </VStack>
+                            </Td>
+                            <Td>{formatCurrency(campaign.budget)}</Td>
+                            <Td>{formatCurrency(campaign.spent)}</Td>
+                            <Td fontSize="sm">
+                              {new Date(campaign.start_date).toLocaleDateString()}
+                              {campaign.end_date && ` - ${new Date(campaign.end_date).toLocaleDateString()}`}
+                            </Td>
+                            <Td>
+                              <Button
+                                size="xs"
+                                onClick={() => {
+                                  setSelectedCampaign(campaign);
+                                  onCampDetailOpen();
+                                }}
+                              >
+                                查看
+                              </Button>
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                  {campaignsLoading && <ListRefreshingOverlay columns={8} />}
                 </Box>
 
                 {/* Pagination */}
@@ -597,14 +774,14 @@ const Marketing: React.FC = () => {
             {/* Lead Stats */}
             {leadStats && (
               <StatGroup mb={6}>
-                <SimpleGrid columns={4} spacing={4} w="full">
+                <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} spacing={4} w="full">
                   <Stat>
                     <StatLabel>线索总数</StatLabel>
                     <StatNumber>{leadStats.total_leads}</StatNumber>
                   </Stat>
                   <Stat>
                     <StatLabel>线索总金额</StatLabel>
-                    <StatNumber>${leadStats.total_value.toFixed(2)}</StatNumber>
+                    <StatNumber>{formatCurrency(leadStats.total_value)}</StatNumber>
                   </Stat>
                   <Stat>
                     <StatLabel>转化率</StatLabel>
@@ -618,40 +795,78 @@ const Marketing: React.FC = () => {
               </StatGroup>
             )}
 
+            {leadStats && (
+              <Card bg="rgba(255,255,255,0.95)" borderRadius="28px" boxShadow="0 16px 36px rgba(70, 41, 15, 0.08)" mb={6}>
+                <CardHeader pb={0}>
+                  <Text fontSize="lg" fontWeight="700" color="gray.800">线索来源分布</Text>
+                  <Text fontSize="sm" color="gray.500">帮助判断当前哪类渠道更稳定地产出机会</Text>
+                </CardHeader>
+                <CardBody>
+                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                    {leadSourceItems.map(([source, count]) => (
+                      <Box key={source}>
+                        <HStack justify="space-between" mb={1.5}>
+                          <Text fontSize="sm" color="gray.700">{getLeadSourceLabel(source)}</Text>
+                          <Text fontSize="sm" fontWeight="700" color="gray.800">{count}</Text>
+                        </HStack>
+                        <Progress
+                          value={(count / maxLeadSource) * 100}
+                          colorScheme="blue"
+                          borderRadius="full"
+                          bg="gray.100"
+                        />
+                      </Box>
+                    ))}
+                  </SimpleGrid>
+                </CardBody>
+              </Card>
+            )}
+
             {/* Filter */}
-            <HStack mb={4} spacing={4}>
-              <Select
-                placeholder="按状态筛选"
-                value={leadStatusFilter}
-                onChange={(e) => setLeadStatusFilter(e.target.value)}
-                width="200px"
-              >
-                <option value="new">新线索</option>
-                <option value="contacted">已接触</option>
-                <option value="qualified">已确认</option>
-                <option value="proposal">方案中</option>
-                <option value="converted">已转化</option>
-                <option value="lost">已流失</option>
-              </Select>
-              <Select
-                placeholder="按来源筛选"
-                value={leadSourceFilter}
-                onChange={(e) => setLeadSourceFilter(e.target.value)}
-                width="200px"
-              >
-                <option value="email">邮件</option>
-                <option value="phone">电话</option>
-                <option value="website">官网</option>
-                <option value="referral">转介绍</option>
-                <option value="event">活动</option>
-              </Select>
-              <Button colorScheme="blue" onClick={onLeadCreateOpen}>
-                + 新建线索
-              </Button>
+            <HStack mb={4} spacing={4} justify="space-between" align="start" wrap="wrap">
+              <HStack spacing={4} wrap="wrap" flex="1">
+                <Input
+                  placeholder="按客户、公司、邮箱或备注搜索"
+                  {...leadSearchInputProps}
+                  width="320px"
+                />
+                <Select
+                  placeholder="按状态筛选"
+                  value={leadStatusFilter}
+                  onChange={(e) => setLeadStatusFilter(e.target.value)}
+                  width="200px"
+                >
+                  <option value="new">新线索</option>
+                  <option value="contacted">已接触</option>
+                  <option value="qualified">已确认</option>
+                  <option value="proposal">方案中</option>
+                  <option value="converted">已转化</option>
+                  <option value="lost">已流失</option>
+                </Select>
+                <Select
+                  placeholder="按来源筛选"
+                  value={leadSourceFilter}
+                  onChange={(e) => setLeadSourceFilter(e.target.value)}
+                  width="200px"
+                >
+                  <option value="email">邮件</option>
+                  <option value="phone">电话</option>
+                  <option value="website">官网</option>
+                  <option value="referral">转介绍</option>
+                  <option value="event">活动</option>
+                </Select>
+                <Button colorScheme="blue" onClick={onLeadCreateOpen}>
+                  + 新建线索
+                </Button>
+              </HStack>
+              <HStack spacing={3}>
+                <Text fontSize="sm" fontWeight="600" color="gray.500">列表密度</Text>
+                <ListDensityToggle value={tableDensity} onChange={setTableDensity} />
+              </HStack>
             </HStack>
 
             {/* Leads Table */}
-            {loading ? (
+            {leadsLoading && leads.length === 0 ? (
               <Box textAlign="center" py={10}>
                 <Spinner />
               </Box>
@@ -659,51 +874,80 @@ const Marketing: React.FC = () => {
               <Text>暂无线索数据</Text>
             ) : (
               <>
-                <Box overflowX="auto">
-                  <Table variant="simple">
-                    <Thead>
-                      <Tr>
-                        <Th>ID</Th>
-                        <Th>客户</Th>
-                        <Th>状态</Th>
-                        <Th>来源</Th>
-                        <Th>金额</Th>
-                        <Th>预计关闭日期</Th>
-                        <Th>操作</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {leads.map((lead) => (
-                        <Tr key={lead.id}>
-                          <Td>#{lead.id}</Td>
-                          <Td>客户 #{lead.customer_id}</Td>
-                          <Td>
-                            <Badge colorScheme={getLeadStatusColor(lead.status)}>
-                              {lead.status}
-                            </Badge>
-                          </Td>
-                          <Td>{lead.source}</Td>
-                          <Td>${lead.value.toFixed(2)}</Td>
-                          <Td fontSize="xs">
-                            {lead.expected_close_date
-                              ? new Date(lead.expected_close_date).toLocaleDateString()
-                              : '暂无'}
-                          </Td>
-                          <Td>
-                            <Button
-                              size="xs"
-                              onClick={() => {
-                                setSelectedLead(lead);
-                                onLeadDetailOpen();
-                              }}
-                            >
-                              查看
-                            </Button>
-                          </Td>
+                <Box position="relative">
+                  {leadsLoading && (
+                    <HStack
+                      justify="space-between"
+                      px={3}
+                      py={2}
+                      mb={3}
+                      borderRadius="16px"
+                      bg="blue.50"
+                      color="gray.600"
+                      fontSize="sm"
+                    >
+                      <Text>正在刷新线索列表...</Text>
+                      <Spinner size="sm" color="blue.500" />
+                    </HStack>
+                  )}
+                  <Box
+                    overflowX="auto"
+                    opacity={leadsLoading ? 0.72 : 1}
+                    transition="opacity 0.18s ease"
+                  >
+                    <Table variant="simple" size={tableDensity === 'comfortable' ? 'md' : 'sm'}>
+                      <Thead>
+                        <Tr>
+                          <SortableTh label="线索编号" column="id" activeSortBy={leadSortBy} activeSortOrder={leadSortOrder} onToggle={handleLeadSortToggle} />
+                          <Th>客户 / 负责人</Th>
+                          <SortableTh label="状态" column="status" activeSortBy={leadSortBy} activeSortOrder={leadSortOrder} onToggle={handleLeadSortToggle} />
+                          <SortableTh label="来源" column="source" activeSortBy={leadSortBy} activeSortOrder={leadSortOrder} onToggle={handleLeadSortToggle} />
+                          <SortableTh label="金额" column="value" activeSortBy={leadSortBy} activeSortOrder={leadSortOrder} onToggle={handleLeadSortToggle} />
+                          <SortableTh label="预计关闭日期" column="expected_close_date" activeSortBy={leadSortBy} activeSortOrder={leadSortOrder} onToggle={handleLeadSortToggle} />
+                          <Th>操作</Th>
                         </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
+                      </Thead>
+                      <Tbody>
+                        {leads.map((lead) => (
+                          <Tr key={lead.id}>
+                            <Td>线索 #{lead.id}</Td>
+                            <Td>
+                              <VStack align="start" spacing={0.5}>
+                                <Text fontSize="sm" color="gray.700">{getCustomerLabel(lead.customer_id)}</Text>
+                                <Text fontSize="sm" color="gray.500">
+                                  {lead.assigned_to_name || '未分配'} · {lead.assigned_team_name || '未分组'}
+                                </Text>
+                              </VStack>
+                            </Td>
+                            <Td>
+                              <Badge colorScheme={getLeadStatusColor(lead.status)}>
+                                {getLeadStatusLabel(lead.status)}
+                              </Badge>
+                            </Td>
+                            <Td>{getLeadSourceLabel(lead.source)}</Td>
+                            <Td>{formatCurrency(lead.value)}</Td>
+                            <Td fontSize="sm">
+                              {lead.expected_close_date
+                                ? new Date(lead.expected_close_date).toLocaleDateString()
+                                : '暂无'}
+                            </Td>
+                            <Td>
+                              <Button
+                                size="xs"
+                                onClick={() => {
+                                  setSelectedLead(lead);
+                                  onLeadDetailOpen();
+                                }}
+                              >
+                                查看
+                              </Button>
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                  {leadsLoading && <ListRefreshingOverlay columns={7} />}
                 </Box>
 
                 {/* Pagination */}
@@ -782,6 +1026,8 @@ const Marketing: React.FC = () => {
           onSubmit={(data) => handleUpdateLead(data)}
           title="线索详情"
           customerOptions={customerOptions}
+          customerLabel={getCustomerLabel(selectedLead.customer_id)}
+          statusLabel={getLeadStatusLabel(selectedLead.status)}
         />
       )}
     </Box>
@@ -970,6 +1216,8 @@ interface LeadModalProps {
   onSubmit: (data: Partial<Lead>) => void;
   title: string;
   customerOptions: CustomerOption[];
+  customerLabel?: string;
+  statusLabel?: string;
 }
 
 const LeadModal: React.FC<LeadModalProps> = ({
@@ -979,6 +1227,8 @@ const LeadModal: React.FC<LeadModalProps> = ({
   onSubmit,
   title,
   customerOptions,
+  customerLabel,
+  statusLabel,
 }) => {
   const [formData, setFormData] = useState<Partial<Lead>>(
     lead || {
@@ -1011,7 +1261,7 @@ const LeadModal: React.FC<LeadModalProps> = ({
         <ModalBody>
           <VStack spacing={4}>
             <FormControl>
-              <FormLabel>客户 ID</FormLabel>
+              <FormLabel>客户</FormLabel>
               <Select
                 placeholder="请选择客户"
                 value={formData.customer_id || ''}
@@ -1043,6 +1293,19 @@ const LeadModal: React.FC<LeadModalProps> = ({
                 <option value="lost">已流失</option>
               </Select>
             </FormControl>
+
+            {lead && (
+              <>
+                <FormControl isReadOnly>
+                  <FormLabel>当前客户</FormLabel>
+                  <Input value={customerLabel || ''} isReadOnly />
+                </FormControl>
+                <FormControl isReadOnly>
+                  <FormLabel>当前状态说明</FormLabel>
+                  <Input value={statusLabel || ''} isReadOnly />
+                </FormControl>
+              </>
+            )}
 
             <FormControl>
               <FormLabel>来源</FormLabel>

@@ -5,6 +5,39 @@ from enum import Enum
 
 # Global db instance - will be initialized in app.py
 db = SQLAlchemy()
+
+
+class Team(db.Model):
+    __tablename__ = 'teams'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    leader_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    members = db.relationship('User', back_populates='team', foreign_keys='User.team_id', lazy=True)
+    leader = db.relationship('User', back_populates='managed_team', foreign_keys=[leader_id], uselist=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'leader_id': self.leader_id,
+            'leader_name': (
+                f'{self.leader.first_name or ""} {self.leader.last_name or ""}'.strip()
+                if self.leader else None
+            ),
+            'is_active': self.is_active,
+            'member_count': len(self.members),
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
 class User(db.Model):
     __tablename__ = 'users'
     
@@ -16,13 +49,23 @@ class User(db.Model):
     first_name = db.Column(db.String(50))
     last_name = db.Column(db.String(50))
     phone = db.Column(db.String(20))
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'))
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    team = db.relationship('Team', back_populates='members', foreign_keys=[team_id])
+    managed_team = db.relationship('Team', back_populates='leader', foreign_keys='Team.leader_id', uselist=False)
+    assigned_customers = db.relationship('Customer', back_populates='assigned_sales_rep', foreign_keys='Customer.assigned_sales_rep_id', lazy=True)
+    assigned_opportunities = db.relationship('Opportunity', back_populates='assigned_user', foreign_keys='Opportunity.assigned_to', lazy=True)
+    managed_campaigns = db.relationship('MarketingCampaign', back_populates='manager_user', foreign_keys='MarketingCampaign.manager_id', lazy=True)
     customer_interactions = db.relationship('CustomerInteraction', backref='user', lazy=True)
-    leads = db.relationship('Lead', backref='assigned_to_user', lazy=True)
+    leads = db.relationship('Lead', back_populates='assigned_to_user', foreign_keys='Lead.assigned_to', lazy=True)
+
+    @property
+    def display_name(self):
+        return f'{self.first_name or ""} {self.last_name or ""}'.strip() or self.username
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -40,6 +83,9 @@ class User(db.Model):
             'first_name': self.first_name,
             'last_name': self.last_name,
             'phone': self.phone,
+            'team_id': self.team_id,
+            'team_name': self.team.name if self.team else None,
+            'is_team_lead': self.role == 'sales_lead',
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
@@ -68,6 +114,7 @@ class Customer(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    assigned_sales_rep = db.relationship('User', back_populates='assigned_customers', foreign_keys=[assigned_sales_rep_id])
     interactions = db.relationship('CustomerInteraction', backref='customer', lazy=True)
     orders = db.relationship('Order', backref='customer', lazy=True)
     leads = db.relationship('Lead', backref='customer', lazy=True)
@@ -88,6 +135,9 @@ class Customer(db.Model):
             'status': self.status,
             'customer_level': self.customer_level,
             'assigned_sales_rep_id': self.assigned_sales_rep_id,
+            'assigned_sales_rep_name': self.assigned_sales_rep.display_name if self.assigned_sales_rep else None,
+            'assigned_sales_team_id': self.assigned_sales_rep.team_id if self.assigned_sales_rep else None,
+            'assigned_sales_team_name': self.assigned_sales_rep.team.name if self.assigned_sales_rep and self.assigned_sales_rep.team else None,
             'notes': self.notes,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
@@ -107,12 +157,16 @@ class Lead(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    assigned_to_user = db.relationship('User', back_populates='leads', foreign_keys=[assigned_to])
     
     def to_dict(self):
         return {
             'id': self.id,
             'customer_id': self.customer_id,
             'assigned_to': self.assigned_to,
+            'assigned_to_name': self.assigned_to_user.display_name if self.assigned_to_user else None,
+            'assigned_team_id': self.assigned_to_user.team_id if self.assigned_to_user else None,
+            'assigned_team_name': self.assigned_to_user.team.name if self.assigned_to_user and self.assigned_to_user.team else None,
             'status': self.status,
             'source': self.source,
             'value': self.value,
@@ -136,6 +190,8 @@ class CustomerInteraction(db.Model):
     duration_minutes = db.Column(db.Integer)  # for calls/meetings
     outcome = db.Column(db.String(200))  # positive, negative, neutral
     next_action = db.Column(db.Text)  # follow-up needed
+    next_follow_up_at = db.Column(db.DateTime)
+    reminder_status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -151,6 +207,9 @@ class CustomerInteraction(db.Model):
             'duration_minutes': self.duration_minutes,
             'outcome': self.outcome,
             'next_action': self.next_action,
+            'next_follow_up_at': self.next_follow_up_at.isoformat() if self.next_follow_up_at else None,
+            'reminder_status': self.reminder_status,
+            'owner_name': self.user.display_name if self.user else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
@@ -170,6 +229,7 @@ class Opportunity(db.Model):
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    assigned_user = db.relationship('User', back_populates='assigned_opportunities', foreign_keys=[assigned_to])
     
     def to_dict(self):
         return {
@@ -177,6 +237,9 @@ class Opportunity(db.Model):
             'name': self.name,
             'customer_id': self.customer_id,
             'assigned_to': self.assigned_to,
+            'assigned_to_name': self.assigned_user.display_name if self.assigned_user else None,
+            'assigned_team_id': self.assigned_user.team_id if self.assigned_user else None,
+            'assigned_team_name': self.assigned_user.team.name if self.assigned_user and self.assigned_user.team else None,
             'stage': self.stage,
             'value': self.value,
             'probability': self.probability,
@@ -203,13 +266,19 @@ class Order(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    opportunity = db.relationship('Opportunity', foreign_keys=[opportunity_id])
     
     def to_dict(self):
+        owner_user = self.opportunity.assigned_user if self.opportunity and self.opportunity.assigned_user else self.customer.assigned_sales_rep
         return {
             'id': self.id,
             'order_number': self.order_number,
             'customer_id': self.customer_id,
             'opportunity_id': self.opportunity_id,
+            'owner_id': owner_user.id if owner_user else None,
+            'owner_name': owner_user.display_name if owner_user else None,
+            'owner_team_id': owner_user.team_id if owner_user else None,
+            'owner_team_name': owner_user.team.name if owner_user and owner_user.team else None,
             'status': self.status,
             'total_amount': self.total_amount,
             'currency': self.currency,
@@ -238,6 +307,7 @@ class MarketingCampaign(db.Model):
     manager_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    manager_user = db.relationship('User', back_populates='managed_campaigns', foreign_keys=[manager_id])
     
     def to_dict(self):
         return {
@@ -252,6 +322,9 @@ class MarketingCampaign(db.Model):
             'target_audience': self.target_audience,
             'channel': self.channel,
             'manager_id': self.manager_id,
+            'manager_name': self.manager_user.display_name if self.manager_user else None,
+            'manager_team_id': self.manager_user.team_id if self.manager_user else None,
+            'manager_team_name': self.manager_user.team.name if self.manager_user and self.manager_user.team else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

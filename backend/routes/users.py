@@ -3,9 +3,10 @@
 User Management Routes
 """
 from flask import Blueprint, request
-from models import User, db
+from models import Team, User, db
 from utils.response import AppResponse, not_found, bad_request, internal_error
 from utils.rbac import require_permission, require_admin, get_current_user
+from utils.data_scope import can_access_user, can_manage_team_member, has_global_scope
 from utils.db import (
     QueryBuilder, PaginationHelper, SortHelper, FilterHelper, safe_commit
 )
@@ -35,11 +36,22 @@ def list_users():
     
     # 构建查询
     query = User.query
+    current_user = get_current_user()
+
+    if current_user.role == 'sales_lead':
+        if current_user.team_id:
+            query = query.filter(User.team_id == current_user.team_id)
+        else:
+            query = query.filter(User.id == current_user.id)
     
     # 应用过滤
     role = request.args.get('role')
     if role:
         query = query.filter(User.role == role)
+
+    team_id = request.args.get('team_id', type=int)
+    if team_id:
+        query = query.filter(User.team_id == team_id)
     
     is_active = request.args.get('is_active')
     if is_active is not None:
@@ -68,9 +80,12 @@ def list_users():
 @require_permission('users:read')
 def get_user(user_id):
     """获取单个用户详情"""
+    current_user = get_current_user()
     user = User.query.get(user_id)
     if not user:
         return not_found('User not found')
+    if not can_access_user(current_user, user):
+        return AppResponse.forbidden('You do not have permission to view this user')
     
     return AppResponse.success(
         data=user.to_dict(),
@@ -106,16 +121,33 @@ def create_user():
             {'missing_fields': missing_fields}
         )
     
+    current_user = get_current_user()
+
     # 验证角色
-    valid_roles = ['admin', 'manager', 'sales', 'marketing', 'customer_service']
+    valid_roles = ['admin', 'manager', 'sales_lead', 'sales', 'marketing', 'customer_service']
     if data['role'] not in valid_roles:
         return bad_request(
             f'Invalid role. Must be one of: {", ".join(valid_roles)}'
         )
+
+    if current_user.role == 'sales_lead':
+        if data['role'] != 'sales':
+            return bad_request('销售组长只能新增销售角色成员')
+        if not current_user.team_id:
+            return bad_request('当前销售组长尚未绑定销售组')
+        data['team_id'] = current_user.team_id
     
     # 检查用户是否已存在
     if User.query.filter((User.username == data['username']) | (User.email == data['email'])).first():
         return bad_request('Username or email already exists')
+
+    team_id = data.get('team_id')
+    if team_id is not None:
+        team = Team.query.get(team_id)
+        if not team:
+            return not_found('Team not found')
+        if current_user.role == 'sales_lead' and team_id != current_user.team_id:
+            return AppResponse.forbidden('销售组长只能新增到自己小组的成员')
     
     # 创建用户
     user = User(
@@ -124,7 +156,8 @@ def create_user():
         first_name=data.get('first_name'),
         last_name=data.get('last_name'),
         phone=data.get('phone'),
-        role=data['role']
+        role=data['role'],
+        team_id=team_id,
     )
     user.set_password(data['password'])
     
@@ -153,21 +186,33 @@ def update_user(user_id):
         return not_found('User not found')
     
     current_user = get_current_user()
+    is_self = current_user.id == user_id
+    can_manage_member = can_manage_team_member(current_user, user)
     
-    # 非管理员只能更新自己的信息
-    if current_user.role != 'admin' and current_user.id != user_id:
-        return bad_request('You can only update your own information')
+    if not has_global_scope(current_user) and not is_self and not can_manage_member:
+        return bad_request('You can only update your own information or members of your team')
     
     data = request.get_json()
     
     # 允许更新的字段
     allowed_fields = {
-        'first_name', 'last_name', 'phone', 'email', 'role', 'is_active'
+        'first_name', 'last_name', 'phone', 'email', 'role', 'is_active', 'team_id'
     }
     
     # 只有管理员才能更改角色
-    if 'role' in data and current_user.role != 'admin':
+    if 'role' in data and not has_global_scope(current_user):
         return bad_request('Only admins can change user roles')
+
+    if 'team_id' in data and not has_global_scope(current_user):
+        return bad_request('Only admins can change user teams')
+
+    if current_user.role == 'sales_lead' and not is_self and 'is_active' in data:
+        user.is_active = bool(data['is_active'])
+
+    if 'team_id' in data and data['team_id'] is not None:
+        team = Team.query.get(data['team_id'])
+        if not team:
+            return not_found('Team not found')
     
     for field in allowed_fields:
         if field in data:
@@ -219,10 +264,11 @@ def change_password(user_id):
         return not_found('User not found')
     
     current_user = get_current_user()
+    is_self = current_user.id == user_id
+    can_manage_member = can_manage_team_member(current_user, user)
     
-    # 非管理员只能更改自己的密码
-    if current_user.role != 'admin' and current_user.id != user_id:
-        return bad_request('You can only change your own password')
+    if not has_global_scope(current_user) and not is_self and not can_manage_member:
+        return bad_request('You can only change your own password or members of your team')
     
     data = request.get_json()
     
@@ -230,8 +276,8 @@ def change_password(user_id):
     if 'old_password' not in data or 'new_password' not in data:
         return bad_request('old_password and new_password are required')
     
-    # 非管理员需要验证旧密码
-    if current_user.role != 'admin':
+    # 非管理员本人修改密码时需要验证旧密码
+    if not has_global_scope(current_user) and not can_manage_member:
         if not user.check_password(data['old_password']):
             return bad_request('Old password is incorrect')
     

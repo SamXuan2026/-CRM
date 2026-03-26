@@ -24,7 +24,7 @@ import {
   UnorderedList,
   VStack,
 } from '@chakra-ui/react';
-import { FiArrowRight, FiBookOpen, FiClock, FiLayers, FiMap } from 'react-icons/fi';
+import { FiArrowRight, FiBookOpen, FiClock, FiLayers, FiMap, FiTarget } from 'react-icons/fi';
 
 const DOC_SECTIONS = [
   {
@@ -50,6 +50,12 @@ const DOC_SECTIONS = [
     label: '开发日志回顾',
     icon: FiClock,
     summary: '按真实同日小时级节奏回顾建设与修复过程。',
+  },
+  {
+    id: 'roadmap',
+    label: 'v1.3 规划',
+    icon: FiTarget,
+    summary: '梳理下一阶段的高价值优化项与交付优先级。',
   },
 ] as const;
 
@@ -199,6 +205,13 @@ const DOC_OUTLINES: Record<string, Array<{ id: string; label: string }>> = {
     id: `journal-step-${index + 1}`,
     label: `Step ${String(index + 1).padStart(2, '0')} ${entry.title}`,
   })),
+  roadmap: [
+    { id: 'roadmap-goal', label: '1. 版本目标' },
+    { id: 'roadmap-p0', label: '2. P0 必做事项' },
+    { id: 'roadmap-p1', label: '3. P1 高价值增强' },
+    { id: 'roadmap-ops', label: '4. 部署与运维优化' },
+    { id: 'roadmap-longterm', label: '5. 中长期演进' },
+  ],
 };
 
 const OnlineDocs = () => {
@@ -840,6 +853,132 @@ const OnlineDocs = () => {
                 <VStack align="stretch" spacing={2} position={{ xl: 'sticky' }} top={{ xl: '92px' }} className="doc-no-print">
                   <Text fontSize="sm" color="gray.500">{currentSection.label}</Text>
                   {DOC_OUTLINES.journal.map((item) => (
+                    <Button key={item.id} as="a" href={`#${item.id}`} justifyContent="flex-start" variant="ghost" whiteSpace="normal" h="auto" py={3} px={3}>
+                      {item.label}
+                    </Button>
+                  ))}
+                </VStack>
+              </SectionCard>
+            </Grid>
+          </TabPanel>
+
+          <TabPanel px={0}>
+            <Grid templateColumns={{ base: '1fr', xl: 'minmax(0, 1fr) 280px' }} gap={6}>
+              <VStack align="stretch" spacing={6}>
+                <SimpleGrid columns={{ base: 1, xl: 4 }} spacing={4}>
+                  <BlueprintCard
+                    title="版本定位"
+                    items={[
+                      'v1.3 目标不是增加零散功能，而是把 CRM 从“可演示”推进到“更可持续使用”。',
+                      '重点提升桌面端工作流连贯性、跟进推进能力和部署稳定性。',
+                    ]}
+                  />
+                  <BlueprintCard
+                    title="规划原则"
+                    items={[
+                      '优先做高频路径、明显痛点和可形成复用基础能力的改造。',
+                      '优先支持客户跟进、经营分析、部署稳定和工程质量四条主线。',
+                    ]}
+                  />
+                  <BlueprintCard
+                    title="交付对象"
+                    items={[
+                      '面向业务使用者、实施方和后续维护人员。',
+                      '兼顾演示可用性与日常持续使用的可行性。',
+                    ]}
+                  />
+                  <BlueprintCard
+                    title="阶段目标"
+                    items={[
+                      '让核心流程从“能用”提升到“顺手、稳定、可追踪”。',
+                      '为后续任务中心、提醒中心和数据库升级做好基础准备。',
+                    ]}
+                  />
+                </SimpleGrid>
+
+                <SectionCard id="roadmap-goal" title="1. 版本目标">
+                  <Text color="gray.600" lineHeight="1.9">
+                    v1.3 版本建议聚焦三个方向：第一，进一步优化桌面端主工作流，让客户详情、互动录入和任务推进更顺；第二，补齐跟进闭环能力，让互动不仅能记录，还能驱动下一步动作；第三，提升部署、版本和质量保障能力，让系统更适合持续使用和多轮演示。
+                  </Text>
+                </SectionCard>
+
+                <SectionCard id="roadmap-p0" title="2. P0 必做事项">
+                  <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={4}>
+                    <BlueprintCard
+                      title="桌面端工作流"
+                      items={[
+                        '将客户详情升级为侧边详情面板，减少多层弹窗切换成本。',
+                        '在详情面板中整合客户信息、时间线、编辑入口和快捷跟进。',
+                      ]}
+                    />
+                    <BlueprintCard
+                      title="跟进闭环"
+                      items={[
+                        '为互动记录新增“下次跟进时间”“提醒状态”“负责人”等字段。',
+                        '新增“我的待跟进”视图，集中展示今日、逾期和即将到期的动作。',
+                      ]}
+                    />
+                    <BlueprintCard
+                      title="筛选效率"
+                      items={[
+                        '支持保存常用筛选条件，例如“本周待跟进”“沉默客户”“高价值客户”。',
+                        '支持一键恢复最近使用的筛选视图，提高销售日常打开效率。',
+                      ]}
+                    />
+                    <BlueprintCard
+                      title="版本与回归"
+                      items={[
+                        '增加版本接口，让前后端、文档和页脚展示统一版本来源。',
+                        '补最小化回归测试，至少覆盖登录、客户列表、互动新增、报表与文档页。',
+                      ]}
+                    />
+                  </SimpleGrid>
+                </SectionCard>
+
+                <SectionCard id="roadmap-p1" title="3. P1 高价值增强">
+                  <UnorderedList spacing={3} color="gray.700" pl={4}>
+                    <ListItem>报表增加时间范围切换、个人/团队视角切换和指标口径说明。</ListItem>
+                    <ListItem>客户状态流转增加明确规则，例如从线索转潜客必须存在有效互动，从潜客转成交需有关联订单。</ListItem>
+                    <ListItem>商机、订单、互动三者增加联动提示，例如商机推进到关键阶段时自动建议补一条互动。</ListItem>
+                    <ListItem>统一空状态、错误状态和成功反馈设计，让页面质量感更完整。</ListItem>
+                    <ListItem>在线文档补充封面、修订记录、页眉页脚，进一步贴近正式交付件。</ListItem>
+                  </UnorderedList>
+                </SectionCard>
+
+                <SectionCard id="roadmap-ops" title="4. 部署与运维优化">
+                  <OrderedList spacing={3} color="gray.700" pl={4}>
+                    <ListItem>将前后端改造成更稳定的守护启动方式，避免进程退出后页面不可用。</ListItem>
+                    <ListItem>增强 `status.sh`，输出前端、后端、数据库、端口和局域网入口的完整检查结果。</ListItem>
+                    <ListItem>增加 SQLite 自动备份和恢复说明，降低演示数据和本地数据丢失风险。</ListItem>
+                    <ListItem>整理标准部署清单，统一 `.env`、端口、IP、脚本和初始化流程。</ListItem>
+                  </OrderedList>
+                </SectionCard>
+
+                <SectionCard id="roadmap-longterm" title="5. 中长期演进">
+                  <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={4}>
+                    <BlueprintCard
+                      title="业务能力演进"
+                      items={[
+                        '增加任务中心、提醒中心和首页待办视图。',
+                        '进一步细化权限与负责人数据隔离能力。',
+                        '探索邮件、日历或企业微信等外部触达能力接入。',
+                      ]}
+                    />
+                    <BlueprintCard
+                      title="技术能力演进"
+                      items={[
+                        '做路由级代码拆分，降低前端主包体积。',
+                        '为 PostgreSQL 迁移预留配置与数据迁移策略。',
+                        '逐步将演示型系统演进为可持续使用的轻业务平台。',
+                      ]}
+                    />
+                  </SimpleGrid>
+                </SectionCard>
+              </VStack>
+              <SectionCard title="目录导航">
+                <VStack align="stretch" spacing={2} position={{ xl: 'sticky' }} top={{ xl: '92px' }} className="doc-no-print">
+                  <Text fontSize="sm" color="gray.500">{currentSection.label}</Text>
+                  {DOC_OUTLINES.roadmap.map((item) => (
                     <Button key={item.id} as="a" href={`#${item.id}`} justifyContent="flex-start" variant="ghost" whiteSpace="normal" h="auto" py={3} px={3}>
                       {item.label}
                     </Button>

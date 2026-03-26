@@ -28,8 +28,15 @@ ROLE_PERMISSIONS = {
         'reports:read', 'reports:export',
         'emails:send', 'emails:read'
     ],
+    'sales_lead': [
+        'users:create', 'users:read', 'users:update',
+        'customers:create', 'customers:read', 'customers:update',
+        'sales:create', 'sales:read', 'sales:update',
+        'reports:read', 'reports:export',
+        'emails:send', 'emails:read'
+    ],
     'sales': [
-        'customers:read', 'customers:update',
+        'customers:create', 'customers:read', 'customers:update',
         'sales:create', 'sales:read', 'sales:update',
         'reports:read',
         'emails:send', 'emails:read'

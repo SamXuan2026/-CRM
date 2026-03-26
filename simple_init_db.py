@@ -28,7 +28,7 @@ def get_or_create_user(cursor, payload):
         cursor.execute(
             """
             UPDATE users
-            SET email = ?, password_hash = ?, role = ?, first_name = ?, last_name = ?, phone = ?, is_active = ?, updated_at = ?
+            SET email = ?, password_hash = ?, role = ?, first_name = ?, last_name = ?, phone = ?, team_id = ?, is_active = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -38,6 +38,7 @@ def get_or_create_user(cursor, payload):
                 payload['first_name'],
                 payload['last_name'],
                 payload['phone'],
+                payload.get('team_id'),
                 payload['is_active'],
                 payload['updated_at'],
                 row[0],
@@ -47,8 +48,8 @@ def get_or_create_user(cursor, payload):
 
     cursor.execute(
         """
-        INSERT INTO users (username, email, password_hash, role, first_name, last_name, phone, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (username, email, password_hash, role, first_name, last_name, phone, team_id, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             payload['username'],
@@ -58,12 +59,71 @@ def get_or_create_user(cursor, payload):
             payload['first_name'],
             payload['last_name'],
             payload['phone'],
+            payload.get('team_id'),
             payload['is_active'],
             payload['created_at'],
             payload['updated_at'],
         ),
     )
     return cursor.lastrowid
+
+
+def get_or_create_team(cursor, payload):
+    cursor.execute("SELECT id FROM teams WHERE name = ?", (payload['name'],))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute(
+            """
+            UPDATE teams
+            SET description = ?, leader_id = ?, is_active = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                payload.get('description'),
+                payload.get('leader_id'),
+                payload.get('is_active', 1),
+                payload['updated_at'],
+                row[0],
+            ),
+        )
+        return row[0]
+
+    cursor.execute(
+        """
+        INSERT INTO teams (name, description, leader_id, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            payload['name'],
+            payload.get('description'),
+            payload.get('leader_id'),
+            payload.get('is_active', 1),
+            payload['created_at'],
+            payload['updated_at'],
+        ),
+    )
+    return cursor.lastrowid
+
+
+def ensure_team_schema(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(80) NOT NULL UNIQUE,
+            description TEXT,
+            leader_id INTEGER,
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME,
+            updated_at DATETIME
+        )
+        """
+    )
+
+    cursor.execute("PRAGMA table_info(users)")
+    user_columns = {row[1] for row in cursor.fetchall()}
+    if 'team_id' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN team_id INTEGER")
 
 
 def get_or_create_customer(cursor, payload):
@@ -467,6 +527,43 @@ def init_db():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("PRAGMA foreign_keys = ON")
+    ensure_team_schema(cursor)
+
+    teams = {
+        'east_sales': {
+            'name': '华东销售一组',
+            'description': '负责华东区域 SMB 与成长型客户跟进。',
+            'leader_id': None,
+            'is_active': 1,
+            'created_at': dt(-120),
+            'updated_at': dt(-1),
+        },
+        'south_sales': {
+            'name': '华南销售一组',
+            'description': '负责华南区域重点行业客户拓展。',
+            'leader_id': None,
+            'is_active': 1,
+            'created_at': dt(-118),
+            'updated_at': dt(-1),
+        },
+        'north_sales': {
+            'name': '华北销售一组',
+            'description': '负责华北区域企业客户拓展与方案推进。',
+            'leader_id': None,
+            'is_active': 1,
+            'created_at': dt(-116),
+            'updated_at': dt(-1),
+        },
+        'west_sales': {
+            'name': '西部销售一组',
+            'description': '负责西部区域新客户拓展与重点客户培育。',
+            'leader_id': None,
+            'is_active': 1,
+            'created_at': dt(-114),
+            'updated_at': dt(-1),
+        },
+    }
+    team_ids = {key: get_or_create_team(cursor, payload) for key, payload in teams.items()}
 
     # Users
     users = {
@@ -478,6 +575,7 @@ def init_db():
             'first_name': '系统',
             'last_name': '管理员',
             'phone': '13800000001',
+            'team_id': None,
             'is_active': 1,
             'created_at': dt(-120),
             'updated_at': dt(-2),
@@ -490,9 +588,36 @@ def init_db():
             'first_name': '李',
             'last_name': '卓群',
             'phone': '13800000002',
+            'team_id': None,
             'is_active': 1,
             'created_at': dt(-110),
             'updated_at': dt(-2),
+        },
+        'lead_liu': {
+            'username': 'lead_liu',
+            'email': 'liu.lead@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales_lead',
+            'first_name': '刘',
+            'last_name': '成峰',
+            'phone': '13800000007',
+            'team_id': team_ids['east_sales'],
+            'is_active': 1,
+            'created_at': dt(-102),
+            'updated_at': dt(-1),
+        },
+        'lead_tan': {
+            'username': 'lead_tan',
+            'email': 'tan.lead@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales_lead',
+            'first_name': '谭',
+            'last_name': '奕衡',
+            'phone': '13800000009',
+            'team_id': team_ids['south_sales'],
+            'is_active': 1,
+            'created_at': dt(-101),
+            'updated_at': dt(-1),
         },
         'sales_wang': {
             'username': 'sales_wang',
@@ -502,6 +627,7 @@ def init_db():
             'first_name': '王',
             'last_name': '越',
             'phone': '13800000003',
+            'team_id': team_ids['east_sales'],
             'is_active': 1,
             'created_at': dt(-100),
             'updated_at': dt(-1),
@@ -514,8 +640,87 @@ def init_db():
             'first_name': '周',
             'last_name': '岚',
             'phone': '13800000004',
+            'team_id': team_ids['east_sales'],
             'is_active': 1,
             'created_at': dt(-95),
+            'updated_at': dt(-1),
+        },
+        'sales_qian': {
+            'username': 'sales_qian',
+            'email': 'qian.sales@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales',
+            'first_name': '钱',
+            'last_name': '沐',
+            'phone': '13800000008',
+            'team_id': team_ids['south_sales'],
+            'is_active': 1,
+            'created_at': dt(-94),
+            'updated_at': dt(-1),
+        },
+        'sales_he': {
+            'username': 'sales_he',
+            'email': 'he.sales@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales',
+            'first_name': '贺',
+            'last_name': '南乔',
+            'phone': '13800000010',
+            'team_id': team_ids['south_sales'],
+            'is_active': 1,
+            'created_at': dt(-92),
+            'updated_at': dt(-1),
+        },
+        'lead_guo': {
+            'username': 'lead_guo',
+            'email': 'guo.lead@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales_lead',
+            'first_name': '郭',
+            'last_name': '景川',
+            'phone': '13800000011',
+            'team_id': team_ids['north_sales'],
+            'is_active': 1,
+            'created_at': dt(-91),
+            'updated_at': dt(-1),
+        },
+        'sales_lin': {
+            'username': 'sales_lin',
+            'email': 'lin.sales@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales',
+            'first_name': '林',
+            'last_name': '知远',
+            'phone': '13800000012',
+            'team_id': team_ids['north_sales'],
+            'is_active': 1,
+            'created_at': dt(-90),
+            'updated_at': dt(-1),
+        },
+        'lead_deng': {
+            'username': 'lead_deng',
+            'email': 'deng.lead@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales_lead',
+            'first_name': '邓',
+            'last_name': '予安',
+            'phone': '13800000013',
+            'team_id': team_ids['west_sales'],
+            'is_active': 1,
+            'created_at': dt(-89),
+            'updated_at': dt(-1),
+        },
+        'sales_shen': {
+            'username': 'sales_shen',
+            'email': 'shen.sales@bluewhalecrm.local',
+            'password_hash': generate_password_hash('demo123'),
+            'role': 'sales',
+            'first_name': '沈',
+            'last_name': '星遥',
+            'phone': '13800000014',
+            'team_id': team_ids['west_sales'],
+            'is_active': 1,
+            'created_at': dt(-88),
             'updated_at': dt(-1),
         },
         'marketing_chen': {
@@ -526,6 +731,7 @@ def init_db():
             'first_name': '陈',
             'last_name': '璟',
             'phone': '13800000005',
+            'team_id': None,
             'is_active': 1,
             'created_at': dt(-90),
             'updated_at': dt(-1),
@@ -538,12 +744,29 @@ def init_db():
             'first_name': '赵',
             'last_name': '宁',
             'phone': '13800000006',
+            'team_id': None,
             'is_active': 1,
             'created_at': dt(-85),
             'updated_at': dt(-1),
         },
     }
     user_ids = {key: get_or_create_user(cursor, payload) for key, payload in users.items()}
+    cursor.execute(
+        "UPDATE teams SET leader_id = ?, updated_at = ? WHERE id = ?",
+        (user_ids['lead_liu'], dt(-1), team_ids['east_sales']),
+    )
+    cursor.execute(
+        "UPDATE teams SET leader_id = ?, updated_at = ? WHERE id = ?",
+        (user_ids['lead_tan'], dt(-1), team_ids['south_sales']),
+    )
+    cursor.execute(
+        "UPDATE teams SET leader_id = ?, updated_at = ? WHERE id = ?",
+        (user_ids['lead_guo'], dt(-1), team_ids['north_sales']),
+    )
+    cursor.execute(
+        "UPDATE teams SET leader_id = ?, updated_at = ? WHERE id = ?",
+        (user_ids['lead_deng'], dt(-1), team_ids['west_sales']),
+    )
 
     # Customers
     customers = {
@@ -736,9 +959,19 @@ def init_db():
                 level,
             )
         )
+    regional_assignment_cycle = {
+        0: ['lead_tan', 'sales_qian', 'sales_he'],
+        1: ['lead_guo', 'sales_lin'],
+        2: ['lead_deng', 'sales_shen'],
+    }
     for index, profile in enumerate(extra_customer_profiles, start=1):
         first_name, last_name, company, city, country, status, level = profile
-        owner_key = 'sales_wang' if index % 2 else 'sales_zhou'
+        if index % 4 == 0:
+            region_bucket = ((index // 4) - 1) % len(regional_assignment_cycle)
+            owner_candidates = regional_assignment_cycle[region_bucket]
+            owner_key = owner_candidates[((index // 4) - 1) % len(owner_candidates)]
+        else:
+            owner_key = 'sales_wang' if index % 2 else 'sales_zhou'
         customers[f'bulk_customer_{index:02d}'] = {
             'first_name': first_name,
             'last_name': last_name,
@@ -1178,7 +1411,7 @@ def init_db():
 
     print("\n蓝鲸CRM 初始化完成。")
     print("默认管理员: admin / admin123")
-    print("演示账号: manager_li / demo123, sales_wang / demo123, sales_zhou / demo123, marketing_chen / demo123, service_zhao / demo123")
+    print("演示账号: manager_li / demo123, lead_liu / demo123, lead_tan / demo123, lead_guo / demo123, lead_deng / demo123, sales_wang / demo123, sales_zhou / demo123, sales_qian / demo123, sales_he / demo123, sales_lin / demo123, sales_shen / demo123, marketing_chen / demo123, service_zhao / demo123")
     print(f"已准备数据: {len(users)} 个用户, {len(customers)} 个客户, {len(leads)} 条线索, {len(opportunities)} 个商机, {len(orders)} 张订单, {len(campaigns)} 个营销活动。")
 
 

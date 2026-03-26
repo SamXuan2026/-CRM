@@ -4,6 +4,25 @@ import { Box, Spinner, VStack, Text } from '@chakra-ui/react';
 import { authApi } from '../services/api';
 import { User, AuthContextType } from './AuthContext';
 
+const getHomeRouteForUser = (user: User | null) => {
+  if (!user) return '/login';
+
+  switch (user.role) {
+    case 'admin':
+    case 'manager':
+    case 'sales_lead':
+      return '/dashboard';
+    case 'sales':
+      return '/customers';
+    case 'marketing':
+      return '/marketing';
+    case 'customer_service':
+      return '/customers';
+    default:
+      return '/settings';
+  }
+};
+
 /**
  * 权限映射表
  */
@@ -23,8 +42,14 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'marketing:create', 'marketing:read', 'marketing:update',
     'reports:read', 'reports:export',
   ],
+  sales_lead: [
+    'users:create', 'users:read', 'users:update',
+    'customers:create', 'customers:read', 'customers:update',
+    'sales:create', 'sales:read', 'sales:update',
+    'reports:read', 'reports:export',
+  ],
   sales: [
-    'customers:read', 'customers:update',
+    'customers:create', 'customers:read', 'customers:update',
     'sales:create', 'sales:read', 'sales:update',
     'reports:read',
   ],
@@ -87,6 +112,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setAccessToken(savedAccessToken);
         setRefreshToken(savedRefreshToken);
         setUser(JSON.parse(savedUser));
+
+        try {
+          const currentUser = await authApi.getCurrentUser();
+          setUser(currentUser);
+          localStorage.setItem('user', JSON.stringify(currentUser));
+        } catch (validationError) {
+          console.error('Stored auth state is invalid:', validationError);
+          clearAuthState();
+        }
       }
     } catch (error) {
       console.error('Failed to load auth state:', error);
@@ -138,7 +172,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           result.refresh_token
         );
         
-        navigate('/dashboard');
+        navigate(getHomeRouteForUser(result.user));
       } catch (error: any) {
         console.error('Login failed:', error);
         throw error;

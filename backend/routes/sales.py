@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import User, Customer, Opportunity, Order, db
+from utils.data_scope import get_accessible_user_ids
 from utils.response import AppResponse
 from utils.rbac import require_permission, require_role
 from utils.db import PaginationHelper
@@ -9,6 +10,10 @@ import uuid
 import random
 
 sales_bp = Blueprint('sales', __name__)
+
+
+def _get_sales_scope_ids(current_user):
+    return get_accessible_user_ids(current_user)
 
 # ============ OPPORTUNITIES ============
 
@@ -50,11 +55,12 @@ def get_opportunities():
         search = f"%{search_query}%"
         query = query.filter(Opportunity.name.ilike(search))
     
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+
     if assigned_to:
         query = query.filter(Opportunity.assigned_to == assigned_to)
-    elif current_user.role not in ['admin', 'manager']:
-        # Non-admin/manager users only see their own opportunities
-        query = query.filter(Opportunity.assigned_to == current_user_id)
+    elif accessible_user_ids is not None:
+        query = query.filter(Opportunity.assigned_to.in_(accessible_user_ids))
     
     # Apply sorting - opportunities sorted by expected_close_date desc (urgent first)
     sort_by = request.args.get('sort_by', 'expected_close_date')
@@ -103,12 +109,19 @@ def create_opportunity():
     customer = Customer.query.get(data['customer_id'])
     if not customer:
         return AppResponse.not_found('Customer not found')
+
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None and customer.assigned_sales_rep_id not in accessible_user_ids:
+        return AppResponse.forbidden('You do not have permission to create opportunities for this customer')
     
     try:
+        assigned_to = data.get('assigned_to', current_user_id)
+        if accessible_user_ids is not None and assigned_to not in accessible_user_ids:
+            return AppResponse.forbidden('You can only assign opportunities within your accessible scope')
         opportunity = Opportunity(
             name=data['name'],
             customer_id=data['customer_id'],
-            assigned_to=data.get('assigned_to', current_user_id),
+            assigned_to=assigned_to,
             stage=data.get('stage', 'lead'),
             value=data['value'],
             probability=data.get('probability', 0),
@@ -145,7 +158,8 @@ def get_opportunity(opportunity_id):
         return AppResponse.not_found('Opportunity not found')
     
     # Check access
-    if current_user.role not in ['admin', 'manager'] and opportunity.assigned_to != current_user_id:
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None and opportunity.assigned_to not in accessible_user_ids:
         return AppResponse.forbidden('You do not have permission to view this opportunity')
     
     return AppResponse.success(data=opportunity.to_dict())
@@ -166,7 +180,8 @@ def update_opportunity(opportunity_id):
         return AppResponse.not_found('Opportunity not found')
     
     # Check access
-    if current_user.role not in ['admin', 'manager'] and opportunity.assigned_to != current_user_id:
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None and opportunity.assigned_to not in accessible_user_ids:
         return AppResponse.forbidden('You do not have permission to update this opportunity')
     
     data = request.get_json()
@@ -175,6 +190,8 @@ def update_opportunity(opportunity_id):
                       'description', 'assigned_to']
     
     try:
+        if 'assigned_to' in data and accessible_user_ids is not None and data['assigned_to'] not in accessible_user_ids:
+            return AppResponse.forbidden('You can only reassign opportunities within your accessible scope')
         for field in allowed_fields:
             if field in data and data[field] is not None:
                 if field == 'expected_close_date':
@@ -251,6 +268,12 @@ def get_orders():
     if search_query:
         search = f"%{search_query}%"
         query = query.filter(Order.order_number.ilike(search))
+
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None:
+        query = query.join(Customer, Customer.id == Order.customer_id).filter(
+            Customer.assigned_sales_rep_id.in_(accessible_user_ids)
+        )
     
     # Apply sorting
     sort_by = request.args.get('sort_by', 'order_date')
@@ -340,9 +363,17 @@ def create_order():
 @jwt_required()
 @require_permission('sales:read')
 def get_order(order_id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    if not current_user:
+        return AppResponse.unauthorized('Invalid user')
+
     order = Order.query.get(order_id)
     if not order:
         return AppResponse.not_found('Order not found')
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None and order.customer and order.customer.assigned_sales_rep_id not in accessible_user_ids:
+        return AppResponse.forbidden('You do not have permission to view this order')
     
     return AppResponse.success(data=order.to_dict())
 
@@ -351,9 +382,17 @@ def get_order(order_id):
 @jwt_required()
 @require_permission('sales:update')
 def update_order(order_id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    if not current_user:
+        return AppResponse.unauthorized('Invalid user')
+
     order = Order.query.get(order_id)
     if not order:
         return AppResponse.not_found('Order not found')
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None and order.customer and order.customer.assigned_sales_rep_id not in accessible_user_ids:
+        return AppResponse.forbidden('You do not have permission to update this order')
     
     data = request.get_json()
     
@@ -412,8 +451,9 @@ def get_pipeline_summary():
     
     # Build query
     query = Opportunity.query
-    if current_user.role not in ['admin', 'manager']:
-        query = query.filter(Opportunity.assigned_to == current_user_id)
+    accessible_user_ids = _get_sales_scope_ids(current_user)
+    if accessible_user_ids is not None:
+        query = query.filter(Opportunity.assigned_to.in_(accessible_user_ids))
     
     # Calculate pipeline stats
     stages = {}

@@ -57,6 +57,7 @@ const getDefaultRouteForRole = (role?: string) => {
   switch (role) {
     case 'admin':
     case 'manager':
+    case 'sales_lead':
       return '/dashboard';
     case 'sales':
       return '/customers';

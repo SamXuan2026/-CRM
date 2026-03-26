@@ -70,5 +70,5 @@ export const useIsAdmin = (): boolean => {
  */
 export const useIsManager = (): boolean => {
   const { hasRole } = useAuth();
-  return hasRole(['admin', 'manager']);
+  return hasRole(['admin', 'manager', 'sales_lead']);
 };

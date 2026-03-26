@@ -1,16 +1,57 @@
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import and_, func
 from models import User, Customer, CustomerInteraction, db
+from utils.data_scope import get_accessible_user_ids
 from utils.response import AppResponse
 from utils.rbac import require_permission, require_role
 from utils.db import PaginationHelper, FilterHelper
-from datetime import datetime
+from datetime import datetime, timedelta
 
 customers_bp = Blueprint('customers', __name__)
 
 
 def _has_customer_global_scope(user):
     return user.role in ['admin', 'manager', 'marketing', 'customer_service']
+
+
+def _get_customer_scope_ids(current_user):
+    if current_user.role in ['marketing', 'customer_service']:
+        return None
+    return get_accessible_user_ids(current_user)
+
+
+def _build_customer_query(current_user):
+    query = Customer.query
+
+    status_filter = request.args.get('status')
+    level_filter = request.args.get('level')
+    search_query = request.args.get('search')
+    assigned_to = request.args.get('assigned_to', type=int)
+
+    if status_filter:
+        query = query.filter(Customer.status == status_filter)
+
+    if level_filter:
+        query = query.filter(Customer.customer_level == level_filter)
+
+    accessible_user_ids = _get_customer_scope_ids(current_user)
+
+    if assigned_to:
+        query = query.filter(Customer.assigned_sales_rep_id == assigned_to)
+    elif accessible_user_ids is not None:
+        query = query.filter(Customer.assigned_sales_rep_id.in_(accessible_user_ids))
+
+    if search_query:
+        search = f"%{search_query}%"
+        query = query.filter(
+            (Customer.first_name.ilike(search)) |
+            (Customer.last_name.ilike(search)) |
+            (Customer.company.ilike(search)) |
+            (Customer.email.ilike(search))
+        )
+
+    return query
 
 @customers_bp.route('/', methods=['GET'])
 @jwt_required()
@@ -25,36 +66,7 @@ def get_customers():
     # Get pagination parameters
     page, per_page = PaginationHelper.get_pagination_params()
     
-    # Build base query
-    query = Customer.query
-    
-    # Get filter parameters
-    status_filter = request.args.get('status')
-    level_filter = request.args.get('level')
-    search_query = request.args.get('search')
-    assigned_to = request.args.get('assigned_to', type=int)
-    
-    # Apply filters
-    if status_filter:
-        query = query.filter(Customer.status == status_filter)
-    
-    if level_filter:
-        query = query.filter(Customer.customer_level == level_filter)
-    
-    if assigned_to:
-        query = query.filter(Customer.assigned_sales_rep_id == assigned_to)
-    elif not _has_customer_global_scope(current_user):
-        # Non-admin/manager users can only see their own customers
-        query = query.filter(Customer.assigned_sales_rep_id == current_user_id)
-    
-    if search_query:
-        search = f"%{search_query}%"
-        query = query.filter(
-            (Customer.first_name.ilike(search)) |
-            (Customer.last_name.ilike(search)) |
-            (Customer.company.ilike(search)) |
-            (Customer.email.ilike(search))
-        )
+    query = _build_customer_query(current_user)
     
     # Apply sorting
     sort_by = request.args.get('sort_by', 'created_at')
@@ -96,6 +108,8 @@ def get_customers():
                     'last_interaction_subject': None,
                     'last_outcome': None,
                     'next_action': None,
+                    'next_follow_up_at': None,
+                    'reminder_status': None,
                 },
             )
             summary['total_interactions'] += 1
@@ -106,6 +120,8 @@ def get_customers():
                 summary['last_interaction_subject'] = interaction.subject
                 summary['last_outcome'] = interaction.outcome
                 summary['next_action'] = interaction.next_action
+                summary['next_follow_up_at'] = interaction.next_follow_up_at.isoformat() if interaction.next_follow_up_at else None
+                summary['reminder_status'] = interaction.reminder_status
 
     for customer in serialized_customers:
         customer['interaction_summary'] = interaction_summary_map.get(
@@ -117,6 +133,8 @@ def get_customers():
                 'last_interaction_subject': None,
                 'last_outcome': None,
                 'next_action': None,
+                'next_follow_up_at': None,
+                'reminder_status': None,
             },
         )
     
@@ -126,6 +144,102 @@ def get_customers():
         per_page=per_page,
         total=customers.total,
         pages=customers.pages
+    )
+
+
+@customers_bp.route('/summary', methods=['GET'])
+@jwt_required()
+@require_permission('customers:read')
+def get_customer_summary():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    if not current_user:
+        return AppResponse.unauthorized('Invalid user')
+
+    query = _build_customer_query(current_user)
+    customer_ids_subquery = query.with_entities(Customer.id).subquery()
+
+    total = db.session.query(func.count()).select_from(customer_ids_subquery).scalar() or 0
+    with_company = (
+        db.session.query(func.count())
+        .select_from(customer_ids_subquery)
+        .join(Customer, Customer.id == customer_ids_subquery.c.id)
+        .filter(
+            Customer.company.isnot(None),
+            func.length(func.trim(Customer.company)) > 0,
+        )
+        .scalar()
+    ) or 0
+
+    level_rows = (
+        db.session.query(Customer.customer_level, func.count(Customer.id))
+        .filter(Customer.id.in_(db.session.query(customer_ids_subquery.c.id)))
+        .group_by(Customer.customer_level)
+        .all()
+    )
+    status_rows = (
+        db.session.query(Customer.status, func.count(Customer.id))
+        .filter(Customer.id.in_(db.session.query(customer_ids_subquery.c.id)))
+        .group_by(Customer.status)
+        .all()
+    )
+
+    latest_date_subquery = (
+        db.session.query(
+            CustomerInteraction.customer_id.label('customer_id'),
+            func.max(CustomerInteraction.date).label('last_interaction_at'),
+        )
+        .filter(CustomerInteraction.customer_id.in_(db.session.query(customer_ids_subquery.c.id)))
+        .group_by(CustomerInteraction.customer_id)
+        .subquery()
+    )
+
+    latest_interaction_subquery = (
+        db.session.query(
+            CustomerInteraction.customer_id.label('customer_id'),
+            CustomerInteraction.date.label('last_interaction_at'),
+            CustomerInteraction.next_action.label('next_action'),
+        )
+        .join(
+            latest_date_subquery,
+            and_(
+                CustomerInteraction.customer_id == latest_date_subquery.c.customer_id,
+                CustomerInteraction.date == latest_date_subquery.c.last_interaction_at,
+            ),
+        )
+        .subquery()
+    )
+
+    covered = db.session.query(func.count()).select_from(latest_interaction_subquery).scalar() or 0
+    recent_cutoff = datetime.utcnow() - timedelta(hours=72)
+    recent = (
+        db.session.query(func.count())
+        .select_from(latest_interaction_subquery)
+        .filter(latest_interaction_subquery.c.last_interaction_at >= recent_cutoff)
+        .scalar()
+    ) or 0
+    with_next_action = (
+        db.session.query(func.count())
+        .select_from(latest_interaction_subquery)
+        .filter(func.length(func.trim(func.coalesce(latest_interaction_subquery.c.next_action, ''))) > 0)
+        .scalar()
+    ) or 0
+
+    return AppResponse.success(
+        data={
+            'total': total,
+            'with_company': with_company,
+            'by_level': {key or '未设置': value for key, value in level_rows},
+            'by_status': {key or 'unknown': value for key, value in status_rows},
+            'follow_up': {
+                'covered': covered,
+                'missing': max(total - covered, 0),
+                'recent': recent,
+                'with_next_action': with_next_action,
+            },
+        },
+        message='Customer summary retrieved successfully',
     )
 
 
@@ -151,11 +265,16 @@ def create_customer():
     if Customer.query.filter_by(email=data['email']).first():
         return AppResponse.bad_request('Email already registered')
     
+    accessible_user_ids = _get_customer_scope_ids(current_user)
+
     # Non-admin users create customers assigned to them
-    if current_user.role not in ['admin', 'manager']:
+    if current_user.role not in ['admin', 'manager', 'sales_lead']:
         data['assigned_sales_rep_id'] = current_user_id
     elif 'assigned_sales_rep_id' not in data:
         data['assigned_sales_rep_id'] = current_user_id
+
+    if accessible_user_ids is not None and data.get('assigned_sales_rep_id') not in accessible_user_ids:
+        return AppResponse.forbidden('You can only assign customers within your accessible scope')
     
     try:
         customer = Customer(
@@ -203,7 +322,8 @@ def get_customer(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only see customers assigned to them
-    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
+    accessible_user_ids = _get_customer_scope_ids(current_user)
+    if accessible_user_ids is not None and customer.assigned_sales_rep_id not in accessible_user_ids:
         return AppResponse.forbidden('You do not have permission to view this customer')
     
     return AppResponse.success(data=customer.to_dict())
@@ -224,10 +344,12 @@ def update_customer(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only update customers assigned to them
-    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
+    accessible_user_ids = _get_customer_scope_ids(current_user)
+    if accessible_user_ids is not None and customer.assigned_sales_rep_id not in accessible_user_ids:
         return AppResponse.forbidden('You do not have permission to update this customer')
     
     data = request.get_json()
+    accessible_user_ids = _get_customer_scope_ids(current_user)
     
     # Update allowed fields
     allowed_fields = [
@@ -237,6 +359,8 @@ def update_customer(customer_id):
     ]
     
     try:
+        if 'assigned_sales_rep_id' in data and accessible_user_ids is not None and data['assigned_sales_rep_id'] not in accessible_user_ids:
+            return AppResponse.forbidden('You can only reassign customers within your accessible scope')
         for field in allowed_fields:
             if field in data and data[field] is not None:
                 setattr(customer, field, data[field])
@@ -288,7 +412,8 @@ def get_customer_interactions(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only see interactions for their customers
-    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
+    accessible_user_ids = _get_customer_scope_ids(current_user)
+    if accessible_user_ids is not None and customer.assigned_sales_rep_id not in accessible_user_ids:
         return AppResponse.forbidden('You do not have permission to view this customer')
     
     page, per_page = PaginationHelper.get_pagination_params()
@@ -336,7 +461,8 @@ def add_customer_interaction(customer_id):
         return AppResponse.not_found('Customer not found')
     
     # Non-admin/manager users can only add interactions for their customers
-    if not _has_customer_global_scope(current_user) and customer.assigned_sales_rep_id != current_user_id:
+    accessible_user_ids = _get_customer_scope_ids(current_user)
+    if accessible_user_ids is not None and customer.assigned_sales_rep_id not in accessible_user_ids:
         return AppResponse.forbidden('You do not have permission to add interactions for this customer')
     
     data = request.get_json()
@@ -357,7 +483,9 @@ def add_customer_interaction(customer_id):
             date=datetime.fromisoformat(data['date']) if data.get('date') else datetime.utcnow(),
             duration_minutes=data.get('duration_minutes'),
             outcome=data.get('outcome'),
-            next_action=data.get('next_action')
+            next_action=data.get('next_action'),
+            next_follow_up_at=datetime.fromisoformat(data['next_follow_up_at']) if data.get('next_follow_up_at') else None,
+            reminder_status=data.get('reminder_status') or 'pending',
         )
         
         db.session.add(interaction)

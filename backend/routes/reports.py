@@ -7,6 +7,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import func
 
 from models import Customer, CustomerInteraction, Lead, Opportunity, Order, User, db
+from utils.data_scope import get_accessible_user_ids
 from utils.rbac import require_permission
 from utils.response import AppResponse, forbidden, unauthorized, bad_request
 
@@ -21,7 +22,7 @@ def _get_current_user():
 
 
 def _is_manager_scope(user):
-    return user.role in ['admin', 'manager']
+    return user.role in ['admin', 'manager', 'sales_lead']
 
 
 def _has_global_report_scope(user):
@@ -41,15 +42,16 @@ def get_dashboard_data():
     opportunity_query = Opportunity.query
     order_query = Order.query
     interaction_query = CustomerInteraction.query
+    accessible_user_ids = get_accessible_user_ids(current_user)
 
-    if not _has_global_report_scope(current_user):
-        customer_query = customer_query.filter(Customer.assigned_sales_rep_id == current_user.id)
-        lead_query = lead_query.filter(Lead.assigned_to == current_user.id)
-        opportunity_query = opportunity_query.filter(Opportunity.assigned_to == current_user.id)
+    if accessible_user_ids is not None and not _has_global_report_scope(current_user):
+        customer_query = customer_query.filter(Customer.assigned_sales_rep_id.in_(accessible_user_ids))
+        lead_query = lead_query.filter(Lead.assigned_to.in_(accessible_user_ids))
+        opportunity_query = opportunity_query.filter(Opportunity.assigned_to.in_(accessible_user_ids))
         order_query = order_query.join(Customer, Customer.id == Order.customer_id).filter(
-            Customer.assigned_sales_rep_id == current_user.id
+            Customer.assigned_sales_rep_id.in_(accessible_user_ids)
         )
-        interaction_query = interaction_query.filter(CustomerInteraction.user_id == current_user.id)
+        interaction_query = interaction_query.filter(CustomerInteraction.user_id.in_(accessible_user_ids))
 
     total_customers = customer_query.count()
     total_leads = lead_query.count()
@@ -121,11 +123,12 @@ def get_sales_report():
 
     orders_query = Order.query
     opportunities_query = Opportunity.query
-    if not _has_global_report_scope(current_user):
+    accessible_user_ids = get_accessible_user_ids(current_user)
+    if accessible_user_ids is not None and not _has_global_report_scope(current_user):
         orders_query = orders_query.join(Customer, Customer.id == Order.customer_id).filter(
-            Customer.assigned_sales_rep_id == current_user.id
+            Customer.assigned_sales_rep_id.in_(accessible_user_ids)
         )
-        opportunities_query = opportunities_query.filter(Opportunity.assigned_to == current_user.id)
+        opportunities_query = opportunities_query.filter(Opportunity.assigned_to.in_(accessible_user_ids))
 
     orders = orders_query.filter(Order.created_at >= start_date, Order.created_at <= end_date).all()
     opportunities = opportunities_query.filter(
@@ -190,11 +193,12 @@ def get_activity_report():
     interactions_query = CustomerInteraction.query
     leads_query = Lead.query
     customers_query = Customer.query
+    accessible_user_ids = get_accessible_user_ids(current_user)
 
-    if not _has_global_report_scope(current_user):
-        interactions_query = interactions_query.filter(CustomerInteraction.user_id == current_user.id)
-        leads_query = leads_query.filter(Lead.assigned_to == current_user.id)
-        customers_query = customers_query.filter(Customer.assigned_sales_rep_id == current_user.id)
+    if accessible_user_ids is not None and not _has_global_report_scope(current_user):
+        interactions_query = interactions_query.filter(CustomerInteraction.user_id.in_(accessible_user_ids))
+        leads_query = leads_query.filter(Lead.assigned_to.in_(accessible_user_ids))
+        customers_query = customers_query.filter(Customer.assigned_sales_rep_id.in_(accessible_user_ids))
 
     interactions = interactions_query.filter(
         CustomerInteraction.date >= start_date,

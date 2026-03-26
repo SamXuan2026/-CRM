@@ -6,9 +6,13 @@ from utils.rbac import require_permission, require_role
 from utils.db import PaginationHelper
 from datetime import datetime
 import uuid
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 marketing_bp = Blueprint('marketing', __name__)
+
+
+def _has_marketing_global_scope(user):
+    return user.role in ['admin', 'manager', 'marketing']
 
 # ============ MARKETING CAMPAIGNS ============
 
@@ -230,6 +234,7 @@ def get_leads():
     # Apply filters
     status_filter = request.args.get('status')
     source_filter = request.args.get('source')
+    search_query = request.args.get('search')
     assigned_to = request.args.get('assigned_to', type=int)
     min_value = request.args.get('min_value', type=float)
     max_value = request.args.get('max_value', type=float)
@@ -239,6 +244,18 @@ def get_leads():
     
     if source_filter:
         query = query.filter(Lead.source == source_filter)
+
+    if search_query:
+        search = f"%{search_query}%"
+        query = query.join(Customer, Lead.customer_id == Customer.id).filter(
+            or_(
+                Customer.first_name.ilike(search),
+                Customer.last_name.ilike(search),
+                Customer.company.ilike(search),
+                Customer.email.ilike(search),
+                Lead.notes.ilike(search),
+            )
+        )
     
     if min_value:
         query = query.filter(Lead.value >= min_value)
@@ -248,7 +265,7 @@ def get_leads():
     
     if assigned_to:
         query = query.filter(Lead.assigned_to == assigned_to)
-    elif current_user.role not in ['admin', 'manager']:
+    elif not _has_marketing_global_scope(current_user):
         # Non-admin/manager users only see leads assigned to them
         query = query.filter(Lead.assigned_to == current_user_id)
     
@@ -340,7 +357,7 @@ def get_lead(lead_id):
         return AppResponse.not_found('Lead not found')
     
     # Check access
-    if current_user.role not in ['admin', 'manager'] and lead.assigned_to != current_user_id:
+    if not _has_marketing_global_scope(current_user) and lead.assigned_to != current_user_id:
         return AppResponse.forbidden('You do not have permission to view this lead')
     
     return AppResponse.success(data=lead.to_dict())
@@ -361,7 +378,7 @@ def update_lead(lead_id):
         return AppResponse.not_found('Lead not found')
     
     # Check access
-    if current_user.role not in ['admin', 'manager'] and lead.assigned_to != current_user_id:
+    if not _has_marketing_global_scope(current_user) and lead.assigned_to != current_user_id:
         return AppResponse.forbidden('You do not have permission to update this lead')
     
     data = request.get_json()
@@ -599,4 +616,3 @@ def get_lead_stats_summary():
         },
         message='Lead stats retrieved successfully'
     )
-
