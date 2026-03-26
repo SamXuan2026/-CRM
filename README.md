@@ -93,6 +93,12 @@ Check whether they are running:
 ./status.sh
 ```
 
+Run the release smoke test:
+
+```bash
+./smoke_test.sh
+```
+
 Stop both services:
 
 ```bash
@@ -100,6 +106,7 @@ Stop both services:
 ```
 
 Logs are written to `crm_system/logs/backend.log` and `crm_system/logs/frontend.log`.
+The smoke test validates the frontend production build and runs the backend role-based scenario regression.
 
 ### Prerequisites
 

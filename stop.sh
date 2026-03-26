@@ -2,17 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RUN_DIR="$ROOT_DIR/run"
-BACKEND_PID_FILE="$RUN_DIR/backend.pid"
-FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
-BACKEND_PORT=5006
-FRONTEND_PORT=3000
-
-get_listen_pid() {
-  local port="$1"
-  lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1
-}
+source "$(cd "$(dirname "$0")" && pwd)/scripts/common.sh"
 
 stop_service() {
   local name="$1"
@@ -20,30 +10,43 @@ stop_service() {
   local port="$3"
   local pid=""
 
-  if [[ -f "$pid_file" ]]; then
-    pid="$(cat "$pid_file")"
-  else
-    pid="$(get_listen_pid "$port")"
-  fi
-
-  if [[ -z "$pid" ]]; then
+  if ! pid="$(track_service_pid "$pid_file" "$port")"; then
     echo "$name is not running."
-    return
+    return 0
   fi
 
   if kill -0 "$pid" >/dev/null 2>&1; then
     kill "$pid"
-    echo "$name stopped."
+    if wait_for_shutdown "$pid" "$port"; then
+      echo "$name stopped gracefully."
+    else
+      echo "$name did not stop in ${STOP_WAIT_SECONDS}s, forcing shutdown."
+      kill -9 "$pid" >/dev/null 2>&1 || true
+      if wait_for_shutdown "$pid" "$port"; then
+        echo "$name was force stopped."
+      else
+        echo "$name may still be running."
+        return 1
+      fi
+    fi
   else
     echo "$name was not running."
   fi
 
   rm -f "$pid_file"
+  return 0
 }
 
 stop_frontend_first() {
-  stop_service "CRM frontend" "$FRONTEND_PID_FILE" "$FRONTEND_PORT"
-  stop_service "CRM backend" "$BACKEND_PID_FILE" "$BACKEND_PORT"
+  local frontend_status=0
+  local backend_status=0
+
+  stop_service "CRM frontend" "$FRONTEND_PID_FILE" "$FRONTEND_PORT" || frontend_status=$?
+  stop_service "CRM backend" "$BACKEND_PID_FILE" "$BACKEND_PORT" || backend_status=$?
+
+  if [[ "$frontend_status" -ne 0 || "$backend_status" -ne 0 ]]; then
+    exit 1
+  fi
 }
 
 stop_frontend_first

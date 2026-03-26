@@ -2,74 +2,101 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_DIR="$ROOT_DIR/backend"
-FRONTEND_DIR="$ROOT_DIR/frontend"
-RUN_DIR="$ROOT_DIR/run"
-LOG_DIR="$ROOT_DIR/logs"
-BACKEND_PID_FILE="$RUN_DIR/backend.pid"
-FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
-BACKEND_LOG="$LOG_DIR/backend.log"
-FRONTEND_LOG="$LOG_DIR/frontend.log"
-BACKEND_PORT=5006
-FRONTEND_PORT=3000
+source "$(cd "$(dirname "$0")" && pwd)/scripts/common.sh"
 
-mkdir -p "$RUN_DIR" "$LOG_DIR"
-
-get_listen_pid() {
-  local port="$1"
-  lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1
-}
+ensure_runtime_dirs
 
 is_running() {
   local pid_file="$1"
   local port="$2"
+  local health_url="$3"
 
-  if [[ -f "$pid_file" ]]; then
-    local pid
-    pid="$(cat "$pid_file")"
-    if kill -0 "$pid" >/dev/null 2>&1; then
-      return 0
-    fi
-    rm -f "$pid_file"
+  local tracked_pid
+  tracked_pid="$(track_service_pid "$pid_file" "$port" || true)"
+  if [[ -z "$tracked_pid" ]]; then
+    return 1
   fi
 
-  local port_pid
-  port_pid="$(get_listen_pid "$port")"
-  if [[ -n "$port_pid" ]]; then
-    echo "$port_pid" >"$pid_file"
+  if health_check "$health_url"; then
     return 0
   fi
 
+  echo "Found process for $(basename "$pid_file" .pid), but health check failed."
   return 1
 }
 
-start_backend() {
-  if is_running "$BACKEND_PID_FILE" "$BACKEND_PORT"; then
-    echo "CRM backend is already running."
-    return
-  fi
+start_service() {
+  local name="$1"
+  local work_dir="$2"
+  local command="$3"
+  local pid_file="$4"
+  local port="$5"
+  local health_url="$6"
+  local public_url="$7"
+  local log_file="$8"
+
+  : >"$log_file"
 
   (
-    cd "$BACKEND_DIR"
-    nohup python3 app.py >"$BACKEND_LOG" 2>&1 &
-    echo $! >"$BACKEND_PID_FILE"
+    cd "$work_dir"
+    nohup bash -lc "$command" >"$log_file" 2>&1 &
+    echo $! >"$pid_file"
   )
-  echo "CRM backend started: http://172.16.1.32:5006"
+
+  if wait_for_health "$name" "$pid_file" "$port" "$health_url"; then
+    echo "$name started: $public_url"
+    return 0
+  fi
+
+  echo "$name failed to become healthy."
+  print_log_tail "$log_file"
+  rm -f "$pid_file"
+  return 1
+}
+
+adopt_running_service() {
+  local name="$1"
+  local pid_file="$2"
+  local port="$3"
+  local public_url="$4"
+  local pid
+
+  pid="$(track_service_pid "$pid_file" "$port")"
+  echo "$name is already running (PID $pid): $public_url"
+}
+
+start_backend() {
+  if is_running "$BACKEND_PID_FILE" "$BACKEND_PORT" "$BACKEND_HEALTH_URL"; then
+    adopt_running_service "CRM backend" "$BACKEND_PID_FILE" "$BACKEND_PORT" "$BACKEND_PUBLIC_URL"
+    return 0
+  fi
+
+  start_service \
+    "CRM backend" \
+    "$BACKEND_DIR" \
+    "python3 app.py" \
+    "$BACKEND_PID_FILE" \
+    "$BACKEND_PORT" \
+    "$BACKEND_HEALTH_URL" \
+    "$BACKEND_PUBLIC_URL" \
+    "$BACKEND_LOG"
 }
 
 start_frontend() {
-  if is_running "$FRONTEND_PID_FILE" "$FRONTEND_PORT"; then
-    echo "CRM frontend is already running."
-    return
+  if is_running "$FRONTEND_PID_FILE" "$FRONTEND_PORT" "$FRONTEND_HEALTH_URL"; then
+    adopt_running_service "CRM frontend" "$FRONTEND_PID_FILE" "$FRONTEND_PORT" "$FRONTEND_PUBLIC_URL"
+    return 0
   fi
 
-  (
-    cd "$FRONTEND_DIR"
-    nohup npm run dev >"$FRONTEND_LOG" 2>&1 &
-    echo $! >"$FRONTEND_PID_FILE"
-  )
-  echo "CRM frontend started: http://172.16.1.32:3000"
+  start_service \
+    "CRM frontend" \
+    "$FRONTEND_DIR" \
+    "npm run dev" \
+    "$FRONTEND_PID_FILE" \
+    "$FRONTEND_PORT" \
+    "$FRONTEND_HEALTH_URL" \
+    "$FRONTEND_PUBLIC_URL" \
+    "$FRONTEND_LOG"
 }
 
 start_backend

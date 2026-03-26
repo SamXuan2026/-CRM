@@ -34,5 +34,28 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined
+          }
+
+          if (id.includes('@chakra-ui') || id.includes('@emotion') || id.includes('framer-motion')) {
+            return 'chakra-vendor'
+          }
+
+          if (id.includes('react-router-dom')) {
+            return 'router-vendor'
+          }
+
+          if (id.includes('react-icons')) {
+            return 'icons-vendor'
+          }
+
+          return 'vendor'
+        },
+      },
+    },
   }
 })

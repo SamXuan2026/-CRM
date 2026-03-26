@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { Suspense, lazy, useContext } from 'react';
 import {
   Box,
   VStack,
@@ -41,15 +41,15 @@ import { Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import { AuthContext } from './contexts/AuthProvider';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Customers from './pages/Customers';
-import Sales from './pages/Sales';
-import Marketing from './pages/Marketing';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
-import OnlineDocs from './pages/OnlineDocs';
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Sales = lazy(() => import('./pages/Sales'));
+const Marketing = lazy(() => import('./pages/Marketing'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
+const OnlineDocs = lazy(() => import('./pages/OnlineDocs'));
 
 const APP_VERSION = 'v1.2';
 
@@ -86,6 +86,14 @@ const App = () => {
   ].filter((item) => !item.permission || auth.hasPermission(item.permission));
 
   const defaultRoute = getDefaultRouteForRole(auth.user?.role);
+
+  const routeFallback = (
+    <Flex minH="240px" align="center" justify="center">
+      <Text color="brand.700" fontWeight="600">
+        页面加载中...
+      </Text>
+    </Flex>
+  );
 
   /**
    * 处理用户登出
@@ -124,11 +132,13 @@ const App = () => {
    */
   if (!auth.isAuthenticated) {
     return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="*" element={<Login />} />
-      </Routes>
+      <Suspense fallback={routeFallback}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </Suspense>
     );
   }
 
@@ -318,66 +328,68 @@ const App = () => {
 
           {/* Page Content */}
           <Box flex="1" overflowY="auto" p={{ base: 4, md: 6 }}>
-            <Routes>
-              <Route path="/" element={<Navigate to={defaultRoute} replace />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/customers"
-                element={
-                  <ProtectedRoute requiredPermission="customers:read">
-                    <Customers />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/sales"
-                element={
-                  <ProtectedRoute requiredPermission="sales:read">
-                    <Sales />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/marketing"
-                element={
-                  <ProtectedRoute requiredPermission="marketing:read">
-                    <Marketing />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/reports"
-                element={
-                  <ProtectedRoute requiredPermission="reports:read">
-                    <Reports />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/docs"
-                element={
-                  <ProtectedRoute>
-                    <OnlineDocs />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<Navigate to={defaultRoute} replace />} />
-            </Routes>
+            <Suspense fallback={routeFallback}>
+              <Routes>
+                <Route path="/" element={<Navigate to={defaultRoute} replace />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/customers"
+                  element={
+                    <ProtectedRoute requiredPermission="customers:read">
+                      <Customers />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/sales"
+                  element={
+                    <ProtectedRoute requiredPermission="sales:read">
+                      <Sales />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/marketing"
+                  element={
+                    <ProtectedRoute requiredPermission="marketing:read">
+                      <Marketing />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/reports"
+                  element={
+                    <ProtectedRoute requiredPermission="reports:read">
+                      <Reports />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/docs"
+                  element={
+                    <ProtectedRoute>
+                      <OnlineDocs />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<Navigate to={defaultRoute} replace />} />
+              </Routes>
+            </Suspense>
           </Box>
         </Flex>
 

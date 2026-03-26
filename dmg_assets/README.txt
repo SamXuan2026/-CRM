@@ -18,3 +18,5 @@
 说明:
 - 这些启动器默认控制本机目录 /Users/samxuan/sam/code/crm_system 下的项目
 - 日志文件位于 /Users/samxuan/sam/code/crm_system/logs/
+- 启动后会自动做健康检查，不再只判断进程是否存在
+- 如果启动失败，窗口里会直接提示查看 backend.log 和 frontend.log
